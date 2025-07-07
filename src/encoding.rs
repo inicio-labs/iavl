@@ -1,58 +1,96 @@
-use prost::{bytes::Buf, encoding as prost_encoding};
+mod error;
 
-use crate::BoundedUintTrait;
-use crate::types;
-use crate::{NodeError, NodeKey};
-use zigzag::ZigZag;
+pub use self::error::{DeserializationError, SerializationError};
 
-// encode_bytes returns a length-prefixed byte slice.
-pub fn encode_bytes(bytes: &[u8]) -> Vec<u8> {
-    let bytes_length = bytes.len();
-    let mut result = Vec::with_capacity(1 + bytes_length);
-    prost_encoding::encode_varint(bytes_length as u64, &mut result);
-    result.extend_from_slice(bytes);
-    result
+use std::io::{self, Read, Write};
+
+use bytes::{BufMut, BytesMut};
+use integer_encoding::{VarIntReader, VarIntWriter};
+
+use crate::{NodeHash, NodeKey, SHA256_HASH_LEN, types::NonEmptyBz};
+
+const NODE_DB_KEY_LEN: usize = size_of::<u8>() + size_of::<u64>() + size_of::<u32>();
+
+pub fn deserialize_hash<R>(mut reader: R) -> Result<NodeHash, DeserializationError>
+where
+    R: Read,
+{
+    let len: usize = reader.read_varint::<u64>()?.try_into()?;
+
+    if len != SHA256_HASH_LEN.get() {
+        return Err(DeserializationError::PrefixLengthMismatch);
+    }
+
+    let mut hash = NodeHash::default();
+
+    reader
+        .read_exact(&mut hash)
+        .map(|_| hash)
+        .map_err(From::from)
 }
 
-// Encode 32 byte long hash.
-pub fn encode_32bytes_hash(bytes: &[u8]) -> Vec<u8> {
-    let mut result = Vec::new();
+pub fn deserialize_bytes<R>(mut reader: R) -> Result<NonEmptyBz, DeserializationError>
+where
+    R: Read,
+{
+    reader
+        .read_varint::<u64>()
+        .map_err(From::from)
+        .and_then(|len| {
+            if len == 0 {
+                return Err(DeserializationError::ZeroPrefixLength);
+            }
 
-    prost_encoding::encode_varint(32, &mut result);
-    // result.push(32 as u8);
-    result.extend_from_slice(bytes);
-    result
+            let mut buf = BytesMut::with_capacity(len.try_into()?).writer();
+
+            // unwrap is safe because len > 0
+            io::copy(&mut reader.by_ref().take(len), &mut buf)?
+                .eq(&len)
+                .then(|| NonEmptyBz::new(buf.into_inner().freeze()).unwrap())
+                .ok_or(DeserializationError::PrefixLengthMismatch)
+        })
 }
 
-pub fn decode_bytes(bytes: &mut &[u8]) -> Result<Vec<u8>, NodeError> {
-    let value_len = prost_encoding::decode_varint(bytes)
-        .map_err(|_| NodeError::DeserializationError("failed to decode value length".into()))?;
+pub fn serialize_hash<W>(hash: &NodeHash, mut writer: W) -> io::Result<core::num::NonZeroUsize>
+where
+    W: Write,
+{
+    let sha256_hash_len_bytes = writer.write_varint(SHA256_HASH_LEN.get())?;
+    writer.write_all(hash)?;
 
-    let value = bytes
-        .get(..value_len as usize)
-        .ok_or_else(|| NodeError::DeserializationError("invalid value".into()))?;
-
-    bytes.advance(value_len as usize);
-
-    Ok(value.to_vec())
+    // unwrap is safe
+    Ok(SHA256_HASH_LEN.checked_add(sha256_hash_len_bytes).unwrap())
 }
 
-pub fn decode_node_key(bytes: &mut &[u8]) -> Result<NodeKey, NodeError> {
-    let version = prost_encoding::decode_varint(bytes)
-        .map_err(|_| NodeError::DeserializationError("failed to decode version".into()))
-        .and_then(|val| {
-            let version: i64 = ZigZag::decode(val);
-            types::U63::new(version as u64)
-                .map_err(|_| NodeError::DeserializationError("invalid size".into()))
-        })?;
+pub fn serialize_bytes<W>(bz: &NonEmptyBz, mut writer: W) -> Result<usize, SerializationError>
+where
+    W: Write,
+{
+    let prefix_len_bytes = writer.write_varint(bz.len())?;
+    writer.write_all(bz.get())?;
 
-    let nonce = prost_encoding::decode_varint(bytes)
-        .map_err(|_| NodeError::DeserializationError("failed to decode none".into()))
-        .and_then(|val| {
-            let nonce: i64 = ZigZag::decode(val);
-            types::U31::new(nonce as u32)
-                .map_err(|_| NodeError::DeserializationError("invalid nonce".into()))
-        })?;
+    prefix_len_bytes
+        .checked_add(bz.len())
+        .ok_or(SerializationError::Overflow)
+}
 
-    Ok(NodeKey { version, nonce })
+pub const fn make_node_db_key(prefix: u8, nk: &NodeKey) -> [u8; NODE_DB_KEY_LEN] {
+    let mut key = [0; NODE_DB_KEY_LEN];
+    key[0] = prefix;
+
+    let version_be_bytes = nk.version().get().to_be_bytes();
+    let mut i = 0;
+    while i < size_of::<u64>() {
+        key[i + 1] = version_be_bytes[i];
+        i += 1;
+    }
+
+    let nonce_be_bytes = nk.nonce().get().to_be_bytes();
+    let mut i = 0;
+    while i < size_of::<u32>() {
+        key[i + 1 + size_of::<u64>()] = nonce_be_bytes[i];
+        i += 1;
+    }
+
+    key
 }
