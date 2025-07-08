@@ -8,7 +8,7 @@ use crate::{
     types::{NonEmptyBz, U63},
 };
 
-#[derive(Debug, Builder)]
+#[derive(Debug, Clone, Builder)]
 pub struct ImmutableTree<DB> {
     root: ArlockNode,
     ndb: NodeDb<DB>,
