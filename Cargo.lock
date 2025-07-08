@@ -257,6 +257,7 @@ dependencies = [
  "const-hex",
  "integer-encoding",
  "rand",
+ "redb",
  "rstest",
  "sha2",
  "thiserror",
@@ -427,6 +428,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "513962919efc330f829edb2535844d1b912b0fbe2ca165d613e4e8788bb05a5a"
 dependencies = [
  "rand_core",
+]
+
+[[package]]
+name = "redb"
+version = "2.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cef6a6d3a65ea334d6cdfb31fa2525c20184b7aa7bd1ad1e2e37502610d4609f"
+dependencies = [
+ "libc",
 ]
 
 [[package]]

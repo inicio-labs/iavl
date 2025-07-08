@@ -1,3 +1,6 @@
+#[cfg(feature = "redb")]
+pub mod redb;
+
 use core::error::Error;
 
 use crate::types::NonEmptyBz;
@@ -7,7 +10,7 @@ pub trait MutKVStore {
 
     fn insert(&self, key: &NonEmptyBz, value: &NonEmptyBz) -> Result<bool, Self::Error>;
 
-    fn remove(&self, key: &NonEmptyBz) -> Result<(), Self::Error>;
+    fn remove(&self, key: &NonEmptyBz) -> Result<bool, Self::Error>;
 }
 
 pub trait KVStore {

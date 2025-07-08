@@ -3,10 +3,15 @@ name = "iavl"
 version = "0.1.0"
 edition = "2024"
 
+[features]
+default = []
+redb = ["dep:redb"]
+
 [dependencies]
 bon = "3.5"
 bytes = "1.10"
 integer-encoding = "4"
+redb = { version = "2.6", optional = true }
 sha2 = "0.10"
 thiserror = "2"
 
