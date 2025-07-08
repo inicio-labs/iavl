@@ -3,6 +3,7 @@ use std::borrow::Cow;
 use bon::Builder;
 
 use crate::{
+    NodeHash,
     kvstore::KVStore,
     node::{ArlockNode, NodeError, db::NodeDb},
     types::{NonEmptyBz, U63},
@@ -11,11 +12,16 @@ use crate::{
 #[derive(Debug, Clone, Builder)]
 pub struct ImmutableTree<DB> {
     root: ArlockNode,
+    hash: NodeHash,
     ndb: NodeDb<DB>,
     version: U63,
 }
 
 impl<DB> ImmutableTree<DB> {
+    pub fn hash(&self) -> NodeHash {
+        self.hash
+    }
+
     pub fn version(&self) -> U63 {
         self.version
     }

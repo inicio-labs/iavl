@@ -41,15 +41,16 @@ where
 {
     /// `root` must be of Saved type.
     pub fn with_saved_root(ndb: NodeDb<DB>, root: ArlockNode) -> Result<Self> {
-        let version = root
+        let (hash, version) = root
             .read()?
             .as_saved()
-            .map(|sn| save_new_root_node_checked(sn, &ndb).map(|_| sn.version()))
+            .map(|sn| save_new_root_node_checked(sn, &ndb).map(|_| (*sn.hash(), sn.version())))
             .transpose()?
             .ok_or(MutableTreeError::MissingNodeKey)?;
 
         let last_saved = ImmutableTree::builder()
             .root(root.clone())
+            .hash(hash)
             .ndb(ndb.clone())
             .version(version)
             .build();
@@ -148,8 +149,10 @@ where
         let new_root: ArlockNode =
             recursive_make_saved_nodes(drafted, &self.ndb, version, &mut nonce)?.into();
 
+        // unwrap is safe because `new_root` must be saved
         let new_last_saved = ImmutableTree::builder()
             .root(new_root.clone())
+            .hash(*new_root.read()?.hash().unwrap())
             .ndb(self.ndb.clone())
             .version(version)
             .build();
