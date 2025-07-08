@@ -13,6 +13,7 @@ use crate::types::NonEmptyBz;
 
 use super::{KVStore, MutKVStore};
 
+#[derive(Clone)]
 pub struct RedbStore {
     db: Arc<Database>,
     table: TableDefinition<'static, NonEmptyBz, NonEmptyBz>,
