@@ -120,17 +120,18 @@ impl Node {
         )
     }
 
-    pub fn get<DB>(
+    pub fn get<DB, K>(
         &self,
         ndb: &NodeDb<DB>,
-        key: &NonEmptyBz,
+        key: NonEmptyBz<K>,
     ) -> Result<(U63, Option<Cow<'_, NonEmptyBz>>), NodeError>
     where
+        K: AsRef<[u8]>,
         DB: KVStore,
     {
         // leaf node check
         if let Some(value) = self.value() {
-            if key == self.key() {
+            if key.as_non_empty_slice() == self.key().as_non_empty_slice() {
                 return Ok((U63::MIN, Some(Cow::Borrowed(value))));
             }
 
@@ -138,7 +139,7 @@ impl Node {
         }
 
         // unwrap is safe because self is inner node
-        if key < self.key() {
+        if key.as_non_empty_slice() < self.key().as_non_empty_slice() {
             return self
                 .left()
                 .map(|left| left.fetch_full(ndb))

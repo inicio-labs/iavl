@@ -35,7 +35,10 @@ impl<DB> ImmutableTree<DB>
 where
     DB: KVStore,
 {
-    pub fn get(&self, key: &NonEmptyBz) -> Result<(U63, Option<NonEmptyBz>), NodeError> {
+    pub fn get<K>(&self, key: NonEmptyBz<K>) -> Result<(U63, Option<NonEmptyBz>), NodeError>
+    where
+        K: AsRef<[u8]>,
+    {
         self.root()
             .read()?
             .get(&self.ndb, key)

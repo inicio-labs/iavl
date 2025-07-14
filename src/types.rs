@@ -61,6 +61,10 @@ impl<T> NonEmptyBz<T> {
         &self.0
     }
 
+    pub const fn as_ref(&self) -> NonEmptyBz<&T> {
+        NonEmptyBz(&self.0)
+    }
+
     pub fn from_non_empty_bz<U>(nebz: NonEmptyBz<U>) -> Self
     where
         T: From<U>,

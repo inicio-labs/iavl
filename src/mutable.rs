@@ -77,7 +77,10 @@ impl<DB> MutableTree<DB>
 where
     DB: KVStore,
 {
-    pub fn get(&self, key: &NonEmptyBz) -> Result<(U63, Option<NonEmptyBz>)> {
+    pub fn get<K>(&self, key: NonEmptyBz<K>) -> Result<(U63, Option<NonEmptyBz>)>
+    where
+        K: AsRef<[u8]>,
+    {
         let Some(root) = self.root() else {
             return Ok((U63::MIN, None));
         };
@@ -113,7 +116,10 @@ where
         Ok(Some((root, updated)))
     }
 
-    pub fn remove(&mut self, key: &NonEmptyBz) -> Result<bool> {
+    pub fn remove<K>(&mut self, key: NonEmptyBz<K>) -> Result<bool>
+    where
+        K: AsRef<[u8]>,
+    {
         let Some(root) = self.root.take() else {
             return Ok(false);
         };
@@ -163,18 +169,19 @@ where
     }
 }
 
-fn recursive_remove<DB>(
+fn recursive_remove<DB, K>(
     node: ArlockNode,
     ndb: &NodeDb<DB>,
-    key: &NonEmptyBz,
+    key: NonEmptyBz<K>,
 ) -> Result<(Option<ArlockNode>, bool)>
 where
     DB: KVStore,
+    K: AsRef<[u8]>,
 {
     {
         let gnode = node.read()?;
         if gnode.is_leaf() {
-            if gnode.key() == key {
+            if gnode.key().as_non_empty_slice() == key.as_non_empty_slice() {
                 return Ok((None, true));
             }
 
@@ -207,7 +214,7 @@ where
     let gnode = node.read()?;
 
     let (new_left, new_right, removed) = {
-        if key < gnode.key() {
+        if key.as_non_empty_slice() < gnode.key().as_non_empty_slice() {
             let (new_left, removed) = recursive_remove(left, ndb, key)?;
             (new_left, Some(right), removed)
         } else {
