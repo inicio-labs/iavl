@@ -34,7 +34,7 @@ where
         .unwrap();
 
         self.db
-            .get(&key)
+            .get(key.as_non_empty_slice())
             .map_err(From::from)
             .map_err(NodeDbError::Store)?
             .as_ref()
@@ -67,7 +67,10 @@ where
         };
 
         self.db
-            .insert(&node_db_key, &serialized)
+            .insert(
+                node_db_key.as_non_empty_slice(),
+                serialized.as_non_empty_slice(),
+            )
             .map_err(From::from)
             .map_err(NodeDbError::Store)
     }

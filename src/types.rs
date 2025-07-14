@@ -61,6 +61,20 @@ impl<T> NonEmptyBz<T> {
         &self.0
     }
 
+    pub fn from_non_empty_bz<U>(nebz: NonEmptyBz<U>) -> Self
+    where
+        T: From<U>,
+    {
+        Self(nebz.0.into())
+    }
+
+    pub fn as_non_empty_slice(&self) -> NonEmptyBz<&[u8]>
+    where
+        T: AsRef<[u8]>,
+    {
+        NonEmptyBz(self.0.as_ref())
+    }
+
     pub fn len(&self) -> usize
     where
         T: AsRef<[u8]>,

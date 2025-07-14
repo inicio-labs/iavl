@@ -8,17 +8,27 @@ use crate::types::NonEmptyBz;
 pub trait MutKVStore {
     type Error: Error + Send + Sync + 'static;
 
-    fn insert(&self, key: &NonEmptyBz, value: &NonEmptyBz) -> Result<bool, Self::Error>;
+    fn insert<K, V>(&self, key: NonEmptyBz<K>, value: NonEmptyBz<V>) -> Result<bool, Self::Error>
+    where
+        K: AsRef<[u8]>,
+        V: AsRef<[u8]>;
 
-    fn remove(&self, key: &NonEmptyBz) -> Result<bool, Self::Error>;
+    fn remove<K>(&self, key: NonEmptyBz<K>) -> Result<bool, Self::Error>
+    where
+        K: AsRef<[u8]>;
 }
 
 pub trait KVStore {
     type Error: Error + Send + Sync + 'static;
 
-    fn get(&self, key: &NonEmptyBz) -> Result<Option<NonEmptyBz>, Self::Error>;
+    fn get<K>(&self, key: NonEmptyBz<K>) -> Result<Option<NonEmptyBz>, Self::Error>
+    where
+        K: AsRef<[u8]>;
 
-    fn has(&self, key: &NonEmptyBz) -> Result<bool, Self::Error> {
+    fn has<K>(&self, key: NonEmptyBz) -> Result<bool, Self::Error>
+    where
+        K: AsRef<[u8]>,
+    {
         self.get(key).map(|v| v.is_some())
     }
 }

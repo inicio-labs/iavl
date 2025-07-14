@@ -14,4 +14,7 @@ pub enum RedbStoreError {
 
     #[error("storage error: {0}")]
     Storage(#[from] redb::StorageError),
+
+    #[error("empty value error: value must not be empty")]
+    EmptyValue,
 }
