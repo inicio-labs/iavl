@@ -28,6 +28,13 @@ use self::{db::NodeDb, error::Result};
 
 pub type ArlockNode = Arc<RwLock<Node>>;
 
+pub type ArlockSavedNode = Arc<RwLock<SavedNode>>;
+
+pub enum NovaNode {
+    Drafted(DraftedNode),
+    Saved(ArlockSavedNode),
+}
+
 #[derive(Debug)]
 pub enum Node {
     Drafted(DraftedNode),

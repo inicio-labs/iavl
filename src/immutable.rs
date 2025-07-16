@@ -1,20 +1,42 @@
-use std::borrow::Cow;
-
-use bon::Builder;
+use std::{borrow::Cow, sync::PoisonError};
 
 use crate::{
     NodeHash,
     kvstore::KVStore,
-    node::{ArlockNode, NodeError, db::NodeDb},
+    node::{ArlockNode, Node, NodeError, db::NodeDb},
     types::{NonEmptyBz, U63},
 };
 
-#[derive(Debug, Clone, Builder)]
+#[derive(Debug, Clone)]
 pub struct ImmutableTree<DB> {
     root: ArlockNode,
     hash: NodeHash,
     ndb: NodeDb<DB>,
     version: U63,
+}
+
+#[bon::bon]
+impl<DB> ImmutableTree<DB> {
+    #[builder]
+    pub(crate) fn new(
+        root: ArlockNode,
+        ndb: NodeDb<DB>,
+        version: U63,
+    ) -> Result<Self, PoisonError<()>> {
+        let hash = root
+            .read()
+            .map_err(|_| PoisonError::new(()))?
+            .hash()
+            .cloned()
+            .expect("root must be hashed");
+
+        Ok(Self {
+            root,
+            hash,
+            ndb,
+            version,
+        })
+    }
 }
 
 impl<DB> ImmutableTree<DB> {
