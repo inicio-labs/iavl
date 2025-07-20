@@ -1,15 +1,21 @@
 use core::{cmp, mem};
 
+use oblux::{U7, U63};
+
 use crate::{
     kvstore::KVStore,
-    node::{ArlockNode, DraftedNode, db::NodeDb, info::Drafted},
-    types::{U7, U63},
+    node::{
+        ArlockNode, DraftedNode,
+        info::Drafted,
+        ndb::{FetchedNode, NodeDb},
+    },
 };
 
 use super::{Child, InnerNode, InnerNodeError, Result};
 
 impl InnerNode<Drafted> {
-    // TODO: make it simpler and concise, and devise a strategy to avoid returning new node
+    // TODO: make it simpler and concise; devise strategy to reduce key clones
+    /// Returns
     pub fn make_balanced<DB>(&mut self, ndb: &NodeDb<DB>) -> Result<Option<Self>>
     where
         DB: KVStore,
@@ -19,16 +25,19 @@ impl InnerNode<Drafted> {
                 Child::Full(full) => full,
                 Child::Part(nk) => ndb
                     .fetch_one_node(&nk)?
-                    .ok_or(InnerNodeError::ChildNotFound)?
-                    .into(),
+                    .map(|node| match node {
+                        FetchedNode::Deserialized(deserialized_node) => deserialized_node.into(),
+                        _ => unreachable!(),
+                    })
+                    .ok_or(InnerNodeError::ChildNotFound)?,
             };
 
             Ok(node)
         };
 
         let height_size_pair = |node: &ArlockNode| -> Result<_> {
-            let node_r = node.read()?;
-            Ok((node_r.height(), node_r.size()))
+            let gnode = node.read()?;
+            Ok((gnode.height(), gnode.size()))
         };
 
         let left = extract_full(self.left_mut())?;
@@ -47,11 +56,11 @@ impl InnerNode<Drafted> {
         }
 
         if diff > 1 {
-            let mut lw = left.write()?;
+            let mut l_mut = left.write()?;
 
             // unwrap is safe because left must be inner when diff > 1
-            let ll = lw.left_mut().map(extract_full).transpose()?.unwrap();
-            let lr = lw.right_mut().map(extract_full).transpose()?.unwrap();
+            let ll = l_mut.left_mut().map(extract_full).transpose()?.unwrap();
+            let lr = l_mut.right_mut().map(extract_full).transpose()?.unwrap();
 
             let (ll_height, ll_size) = height_size_pair(&ll)?;
             let (lr_height, lr_size) = height_size_pair(&lr)?;
@@ -105,7 +114,7 @@ impl InnerNode<Drafted> {
                         .ok_or(InnerNodeError::Overflow)?;
 
                     InnerNode::builder()
-                        .key(lw.key().clone())
+                        .key(l_mut.key().cloned())
                         .height(new_root_height)
                         .size(new_root_size)
                         .left(Child::Full(ll))
@@ -118,10 +127,10 @@ impl InnerNode<Drafted> {
 
             // left-right case: one left rotation on left, and then one right rotation on self
 
-            let mut lrw = lr.write()?;
+            let mut lr_mut = lr.write()?;
 
-            let lrl = lrw.left_mut().map(extract_full).transpose()?.unwrap();
-            let lrr = lrw.right_mut().map(extract_full).transpose()?.unwrap();
+            let lrl = lr_mut.left_mut().map(extract_full).transpose()?.unwrap();
+            let lrr = lr_mut.right_mut().map(extract_full).transpose()?.unwrap();
 
             let (lrl_height, lrl_size) = height_size_pair(&lrl)?;
             let (lrr_height, lrr_size) = height_size_pair(&lrr)?;
@@ -144,7 +153,7 @@ impl InnerNode<Drafted> {
                     .ok_or(InnerNodeError::Overflow)?;
 
                 InnerNode::builder()
-                    .key(lw.key().clone())
+                    .key(l_mut.key().cloned())
                     .height(new_left_height)
                     .size(new_left_size)
                     .left(Child::Full(ll))
@@ -197,7 +206,7 @@ impl InnerNode<Drafted> {
                     .ok_or(InnerNodeError::Overflow)?;
 
                 InnerNode::builder()
-                    .key(lrw.key().clone())
+                    .key(lr_mut.key().cloned())
                     .height(new_root_height)
                     .size(new_root_size)
                     .left(Child::Full(DraftedNode::from(new_left).into()))
@@ -208,11 +217,11 @@ impl InnerNode<Drafted> {
             return Ok(Some(mem::replace(self, new_root)));
         }
 
-        let mut rw = right.write()?;
+        let mut r_mut = right.write()?;
 
         // unwrap is safe because left must be inner when diff < -1
-        let rl = rw.left_mut().map(extract_full).transpose()?.unwrap();
-        let rr = rw.right_mut().map(extract_full).transpose()?.unwrap();
+        let rl = r_mut.left_mut().map(extract_full).transpose()?.unwrap();
+        let rr = r_mut.right_mut().map(extract_full).transpose()?.unwrap();
 
         let (rl_height, rl_size) = height_size_pair(&rl)?;
         let (rr_height, rr_size) = height_size_pair(&rr)?;
@@ -265,7 +274,7 @@ impl InnerNode<Drafted> {
                     .ok_or(InnerNodeError::Overflow)?;
 
                 InnerNode::builder()
-                    .key(rw.key().clone())
+                    .key(r_mut.key().cloned())
                     .height(new_root_height)
                     .size(new_root_size)
                     .left(Child::Full(DraftedNode::from(new_left).into()))
@@ -278,10 +287,10 @@ impl InnerNode<Drafted> {
 
         // right-left case: one right rotation on right, and then one left rotation on self
 
-        let mut rlw = rl.write()?;
+        let mut rl_mut = rl.write()?;
 
-        let rll = rlw.left_mut().map(extract_full).transpose()?.unwrap();
-        let rlr = rlw.right_mut().map(extract_full).transpose()?.unwrap();
+        let rll = rl_mut.left_mut().map(extract_full).transpose()?.unwrap();
+        let rlr = rl_mut.right_mut().map(extract_full).transpose()?.unwrap();
 
         let (rll_height, rll_size) = height_size_pair(&rll)?;
         let (rlr_height, rlr_size) = height_size_pair(&rlr)?;
@@ -330,7 +339,7 @@ impl InnerNode<Drafted> {
                 .ok_or(InnerNodeError::Overflow)?;
 
             InnerNode::builder()
-                .key(rw.key().clone())
+                .key(r_mut.key().cloned())
                 .height(new_right_height)
                 .size(new_right_size)
                 .left(Child::Full(rlr))
@@ -357,7 +366,7 @@ impl InnerNode<Drafted> {
                 .ok_or(InnerNodeError::Overflow)?;
 
             InnerNode::builder()
-                .key(rlw.key().clone())
+                .key(rl_mut.key().cloned())
                 .height(new_root_height)
                 .size(new_root_size)
                 .left(Child::Full(DraftedNode::from(new_left).into()))

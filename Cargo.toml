@@ -11,6 +11,8 @@ redb = ["dep:redb"]
 bon = "3.5"
 bytes = "1.10"
 integer-encoding = "4"
+nebz = { version = "0.2.0", features = ["bytes"] }
+oblux = "0.1.0"
 redb = { version = "2.6", optional = true }
 sha2 = "0.10"
 thiserror = "2"

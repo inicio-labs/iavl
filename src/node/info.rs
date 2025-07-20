@@ -1,13 +1,15 @@
-use crate::types::{NonEmptyBz, U31, U63};
+use bytes::Bytes;
+use nebz::NonEmptyBz;
+use oblux::{U31, U63};
 
 use super::NodeHash;
 
-pub type Drafted = Drafter<NonEmptyBz>;
+pub type Drafted = Drafter<NonEmptyBz<Bytes>>;
 
-pub type Hashed<HAUX = ()> = Drafter<NonEmptyBz, Hasher<U63, NodeHash, HAUX>>;
+pub type Hashed<HAUX = ()> = Drafter<NonEmptyBz<Bytes>, Hasher<U63, NodeHash, HAUX>>;
 
-pub type Saved<HAUX = (), SAUX = ()> =
-    Drafter<NonEmptyBz, Hasher<U63, NodeHash, HAUX, Saver<U31, SAUX>>>;
+pub type Saved<HAUX = (), SAUX = (), K = Bytes> =
+    Drafter<NonEmptyBz<K>, Hasher<U63, NodeHash, HAUX, Saver<U31, SAUX>>>;
 
 #[derive(Debug, Clone)]
 pub struct Drafter<K, STAGE = ()> {

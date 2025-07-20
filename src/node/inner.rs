@@ -10,20 +10,22 @@ use std::{
     sync::{PoisonError, RwLockReadGuard},
 };
 
+use bytes::Bytes;
 use integer_encoding::VarIntWriter;
+use nebz::NonEmptyBz;
+use oblux::{U7, U63};
 use sha2::{Digest, Sha256};
 
 use crate::{
-    NodeHashPair, NodeKeyPair,
+    NodeHashPair, NodeKey, NodeKeyPair,
     encoding::{self, SerializationError},
     kvstore::KVStore,
-    types::{NonEmptyBz, U7, U63},
 };
 
 use super::{
-    ArlockNode, Node, NodeKey, SavedNode,
-    db::NodeDb,
+    ArlockNode, Node, SavedNode,
     info::{Drafted, Drafter, Hashed, Hasher, Saved, Saver},
+    ndb::{FetchedNode, NodeDb},
 };
 
 use self::error::Result;
@@ -31,7 +33,7 @@ use self::error::Result;
 const LEGACY_MODE: u8 = 0;
 
 #[derive(Debug, Clone)]
-pub struct InnerNode<INFO> {
+pub(crate) struct InnerNode<INFO> {
     info: INFO,
     height: U7,
     size: U63,
@@ -40,7 +42,7 @@ pub struct InnerNode<INFO> {
 }
 
 #[derive(Debug, Clone)]
-pub enum Child {
+pub(crate) enum Child {
     Full(ArlockNode),
     Part(NodeKey),
 }
@@ -62,14 +64,6 @@ impl<INFO> InnerNode<INFO> {
         &self.right
     }
 
-    pub fn height_mut(&mut self) -> &mut U7 {
-        &mut self.height
-    }
-
-    pub fn size_mut(&mut self) -> &mut U63 {
-        &mut self.size
-    }
-
     pub fn left_mut(&mut self) -> &mut Child {
         &mut self.left
     }
@@ -82,7 +76,7 @@ impl<INFO> InnerNode<INFO> {
 #[bon::bon]
 impl InnerNode<Drafted> {
     #[builder]
-    pub fn new(key: NonEmptyBz, height: U7, size: U63, left: Child, right: Child) -> Self {
+    pub fn new(key: NonEmptyBz<Bytes>, height: U7, size: U63, left: Child, right: Child) -> Self {
         Self {
             info: Drafted::new(key),
             height,
@@ -94,7 +88,7 @@ impl InnerNode<Drafted> {
 }
 
 impl InnerNode<Drafted> {
-    pub fn into_hashed(&self, version: U63) -> Result<InnerNode<Hashed<NodeHashPair>>> {
+    pub fn to_hashed(&self, version: U63) -> Result<InnerNode<Hashed<NodeHashPair>>> {
         let left = self
             .left()
             .as_full()
@@ -177,7 +171,10 @@ impl<K, VERSION, HASH, HAUX> InnerNode<Drafter<K, Hasher<VERSION, HASH, HAUX>>> 
     }
 }
 
-impl<HAUX> InnerNode<Saved<HAUX, NodeKeyPair>> {
+impl<K, HAUX> InnerNode<Saved<HAUX, NodeKeyPair, K>>
+where
+    K: AsRef<[u8]>,
+{
     pub fn serialize<W>(&self, mut writer: W) -> Result<NonZeroUsize, SerializationError>
     where
         W: Write,
@@ -185,7 +182,7 @@ impl<HAUX> InnerNode<Saved<HAUX, NodeKeyPair>> {
         let height_bytes_len = writer.write_varint(self.height().to_signed())?;
         let size_bytes_len = writer.write_varint(self.size().to_signed())?;
 
-        let key_bytes_len = encoding::serialize_bytes(self.key(), &mut writer)?;
+        let key_bytes_len = encoding::serialize_nebz(self.key().as_ref(), &mut writer)?;
         let hash_bytes_len = encoding::serialize_hash(self.hash(), &mut writer)?;
 
         // TODO: ascertain whether zig-zag encoding is needed
@@ -205,12 +202,14 @@ impl<HAUX> InnerNode<Saved<HAUX, NodeKeyPair>> {
                     + left_nk_bytes_len.get()
                     + right_nk_bytes_len.get(),
             )
-            .and_then(NonZeroUsize::new)
             .ok_or(SerializationError::Overflow)
     }
 }
 
-impl<HAUX, SAUX> InnerNode<Saved<HAUX, SAUX>> {
+impl<K, HAUX, SAUX> InnerNode<Saved<HAUX, SAUX, K>>
+where
+    K: AsRef<[u8]>,
+{
     pub fn node_key(&self) -> NodeKey {
         NodeKey::new(*self.version(), *self.nonce())
     }
@@ -223,12 +222,6 @@ impl<K, VERSION, HASH, HAUX, STATUS> InnerNode<Drafter<K, Hasher<VERSION, HASH, 
 
     pub fn hash(&self) -> &HASH {
         self.info.hash()
-    }
-}
-
-impl<K, VERSION, HASH, STATUS> InnerNode<Drafter<K, Hasher<VERSION, HASH, NodeHashPair, STATUS>>> {
-    pub fn children_hash_pair(&self) -> &NodeHashPair {
-        self.info.haux()
     }
 }
 
@@ -279,6 +272,10 @@ impl Child {
         };
 
         ndb.fetch_one_node(nk)?
+            .and_then(|node| match node {
+                FetchedNode::Deserialized(deserialized_node) => Some(deserialized_node),
+                _ => unreachable!(),
+            })
             .map(ArlockNode::from)
             .ok_or(InnerNodeError::ChildNotFound)
     }
@@ -297,8 +294,8 @@ impl Child {
     }
 }
 
-impl<STAGE> From<&InnerNode<Drafter<NonEmptyBz, STAGE>>> for InnerNode<Drafted> {
-    fn from(saved: &InnerNode<Drafter<NonEmptyBz, STAGE>>) -> Self {
+impl<STAGE> From<&InnerNode<Drafter<NonEmptyBz<Bytes>, STAGE>>> for InnerNode<Drafted> {
+    fn from(saved: &InnerNode<Drafter<NonEmptyBz<Bytes>, STAGE>>) -> Self {
         Self::builder()
             .key(saved.key().clone())
             .height(saved.height())

@@ -1,34 +1,59 @@
-pub mod immutable;
 pub mod kvstore;
-pub mod mutable;
-pub mod node;
-pub mod types;
 
 mod encoding;
+mod immutable;
+mod mutable;
+mod node;
 mod traversal;
+
+pub use self::{
+    immutable::ImmutableTree,
+    mutable::{MutableTree, MutableTreeError},
+};
 
 use core::num::NonZeroUsize;
 
 use std::io::{Read, Write};
 
 use integer_encoding::{VarIntReader, VarIntWriter};
+use nebz::NonEmptyBz;
+use oblux::{U31, U63};
 
 use self::{
     encoding::{DeserializationError, SerializationError},
-    types::{U31, U63},
+    node::NodeError,
+    sealed::Sealed,
 };
 
-pub const SHA256_HASH_LEN: NonZeroUsize = NonZeroUsize::new(32).unwrap();
+const SHA256_HASH_LEN: NonZeroUsize = NonZeroUsize::new(32).unwrap();
 
-pub type NodeHash<const N: usize = { SHA256_HASH_LEN.get() }> = [u8; N];
+type NodeHash<const N: usize = { SHA256_HASH_LEN.get() }> = [u8; N];
 
-pub type NodeHashPair = (NodeHash, NodeHash);
+type NodeHashPair = (NodeHash, NodeHash);
 
-pub type NodeKeyPair = (NodeKey, NodeKey);
+type NodeKeyPair = (NodeKey, NodeKey);
+
+pub trait Get: Sealed {
+    type Error;
+
+    type Value: AsRef<[u8]>;
+
+    #[allow(clippy::type_complexity)]
+    fn get<K>(
+        &self,
+        key: NonEmptyBz<K>,
+    ) -> Result<(U63, Option<NonEmptyBz<Self::Value>>), Self::Error>
+    where
+        K: AsRef<[u8]>;
+}
+
+#[derive(Debug, thiserror::Error)]
+#[error(transparent)]
+pub struct GetError(#[from] NodeError);
 
 /// NodeKey represents a key of node in the DB
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct NodeKey<V = U63, N = U31> {
+struct NodeKey<V = U63, N = U31> {
     /// version of the IAVL that this node was first added in
     version: V,
 
@@ -37,21 +62,21 @@ pub struct NodeKey<V = U63, N = U31> {
 }
 
 impl<V, N> NodeKey<V, N> {
-    pub const fn new(version: V, nonce: N) -> Self {
+    const fn new(version: V, nonce: N) -> Self {
         Self { version, nonce }
     }
 
-    pub const fn version(&self) -> &V {
+    const fn version(&self) -> &V {
         &self.version
     }
 
-    pub const fn nonce(&self) -> &N {
+    const fn nonce(&self) -> &N {
         &self.nonce
     }
 }
 
 impl NodeKey {
-    pub fn deserialize<R>(mut reader: R) -> Result<Self, DeserializationError>
+    fn deserialize<R>(mut reader: R) -> Result<Self, DeserializationError>
     where
         R: Read,
     {
@@ -68,7 +93,7 @@ impl NodeKey {
         Ok(NodeKey::new(version, nonce))
     }
 
-    pub fn serialize<W>(&self, mut writer: W) -> Result<NonZeroUsize, SerializationError>
+    fn serialize<W>(&self, mut writer: W) -> Result<NonZeroUsize, SerializationError>
     where
         W: Write,
     {
@@ -84,4 +109,8 @@ impl NodeKey {
             .unwrap() // unwrap is safe here as vlen + nlen > 0
             .map_err(From::from)
     }
+}
+
+mod sealed {
+    pub trait Sealed {}
 }

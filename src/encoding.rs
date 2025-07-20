@@ -2,14 +2,17 @@ mod error;
 
 pub use self::error::{DeserializationError, SerializationError};
 
+use core::num::NonZeroUsize;
+
 use std::io::{self, Read, Write};
 
-use bytes::{BufMut, BytesMut};
+use bytes::{BufMut, Bytes, BytesMut};
 use integer_encoding::{VarIntReader, VarIntWriter};
+use nebz::NonEmptyBz;
 
-use crate::{NodeHash, NodeKey, SHA256_HASH_LEN, types::NonEmptyBz};
+use super::{NodeHash, NodeKey, SHA256_HASH_LEN};
 
-const NODE_DB_KEY_LEN: usize = size_of::<u8>() + size_of::<u64>() + size_of::<u32>();
+pub const NODE_DB_KEY_LEN: usize = size_of::<u8>() + size_of::<u64>() + size_of::<u32>();
 
 pub fn deserialize_hash<R>(mut reader: R) -> Result<NodeHash, DeserializationError>
 where
@@ -29,7 +32,7 @@ where
         .map_err(From::from)
 }
 
-pub fn deserialize_bytes<R>(mut reader: R) -> Result<NonEmptyBz, DeserializationError>
+pub fn deserialize_bytes<R>(mut reader: R) -> Result<NonEmptyBz<Bytes>, DeserializationError>
 where
     R: Read,
 {
@@ -51,32 +54,40 @@ where
         })
 }
 
-pub fn serialize_hash<W>(hash: &NodeHash, mut writer: W) -> io::Result<core::num::NonZeroUsize>
+pub fn serialize_hash<W>(
+    hash: &NodeHash<{ SHA256_HASH_LEN.get() }>,
+    mut writer: W,
+) -> io::Result<NonZeroUsize>
 where
     W: Write,
 {
     let sha256_hash_len_bytes = writer.write_varint(SHA256_HASH_LEN.get())?;
     writer.write_all(hash)?;
 
+    // TODO: devise strategy to avoid this unwrap.
     // unwrap is safe
     Ok(SHA256_HASH_LEN.checked_add(sha256_hash_len_bytes).unwrap())
 }
 
-pub fn serialize_bytes<W>(bz: &NonEmptyBz, mut writer: W) -> Result<usize, SerializationError>
+pub fn serialize_nebz<W, BZ>(
+    bz: NonEmptyBz<BZ>,
+    mut writer: W,
+) -> Result<NonZeroUsize, SerializationError>
 where
     W: Write,
+    BZ: AsRef<[u8]>,
 {
-    let prefix_len_bytes = writer.write_varint(bz.len())?;
-    writer.write_all(bz.get())?;
+    let prefix_len_bytes = writer.write_varint(bz.len().get())?;
+    writer.write_all(bz.get().as_ref())?;
 
-    prefix_len_bytes
-        .checked_add(bz.len())
+    bz.len()
+        .checked_add(prefix_len_bytes)
         .ok_or(SerializationError::Overflow)
 }
 
-pub const fn make_node_db_key(prefix: u8, nk: &NodeKey) -> [u8; NODE_DB_KEY_LEN] {
+pub const fn make_ndb_key<const KEY_PREFIX_BYTE: u8>(nk: &NodeKey) -> [u8; NODE_DB_KEY_LEN] {
     let mut key = [0; NODE_DB_KEY_LEN];
-    key[0] = prefix;
+    key[0] = KEY_PREFIX_BYTE;
 
     let version_be_bytes = nk.version().get().to_be_bytes();
     let mut i = 0;

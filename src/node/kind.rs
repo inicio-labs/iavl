@@ -2,40 +2,36 @@ use core::num::NonZeroUsize;
 
 use std::io::{Read, Write};
 
+use bytes::Bytes;
 use integer_encoding::VarIntReader;
+use nebz::NonEmptyBz;
+use oblux::{U7, U63};
 
 use crate::{
     NodeHashPair, NodeKey, NodeKeyPair,
     encoding::{self, DeserializationError, SerializationError},
-    types::{NonEmptyBz, U7, U31, U63},
 };
 
 use super::{
     ArlockNode, InnerNode, LeafNode, Node, NodeHash,
-    info::{Drafted, Hashed, Saved},
+    info::{Drafted, Saved},
     inner::Child,
 };
 
 #[derive(Debug, Clone)]
-pub enum DraftedNode {
+pub(crate) enum DraftedNode {
     Inner(InnerNode<Drafted>),
     Leaf(LeafNode<Drafted>),
 }
 
 #[derive(Debug, Clone)]
-pub enum HashedNode {
-    Inner(InnerNode<Hashed<NodeHashPair>>),
-    Leaf(LeafNode<Hashed>),
-}
-
-#[derive(Debug, Clone)]
-pub enum SavedNode {
+pub(crate) enum SavedNode {
     Inner(InnerNode<Saved<NodeHashPair, NodeKeyPair>>),
     Leaf(LeafNode<Saved>),
 }
 
 #[derive(Debug)]
-pub enum DeserializedNode {
+pub(crate) enum DeserializedNode {
     Inner(InnerNode<Drafted>, NodeHash),
     Leaf(LeafNode<Drafted>),
 }
@@ -87,10 +83,10 @@ impl DeserializedNode {
 }
 
 impl DraftedNode {
-    pub fn key(&self) -> &NonEmptyBz {
+    pub fn key(&self) -> NonEmptyBz<&Bytes> {
         match self {
-            Self::Inner(inner) => inner.key(),
-            Self::Leaf(leaf) => leaf.key(),
+            Self::Inner(inner) => inner.key().as_ref(),
+            Self::Leaf(leaf) => leaf.key().as_ref(),
         }
     }
 
@@ -106,10 +102,6 @@ impl DraftedNode {
             Self::Inner(inner) => inner.size(),
             Self::Leaf(_) => LeafNode::<()>::SIZE,
         }
-    }
-
-    pub fn is_leaf(&self) -> bool {
-        matches!(self, Self::Leaf(_))
     }
 
     pub fn left(&self) -> Option<&Child> {
@@ -135,151 +127,79 @@ impl DraftedNode {
 
     pub fn right_mut(&mut self) -> Option<&mut Child> {
         match self {
-            Self::Inner(inner_node) => Some(inner_node.right_mut()),
-            Self::Leaf(_) => None,
-        }
-    }
-}
-
-impl HashedNode {
-    pub fn key(&self) -> &NonEmptyBz {
-        match self {
-            Self::Inner(inner_node) => inner_node.key(),
-            Self::Leaf(leaf_node) => leaf_node.key(),
-        }
-    }
-
-    pub fn height(&self) -> U7 {
-        match self {
-            Self::Inner(inner_node) => inner_node.height(),
-            Self::Leaf(_) => LeafNode::<()>::HEIGHT,
-        }
-    }
-
-    pub fn size(&self) -> U63 {
-        match self {
-            Self::Inner(inner_node) => inner_node.size(),
-            Self::Leaf(_) => LeafNode::<()>::SIZE,
-        }
-    }
-
-    pub fn hash(&self) -> &NodeHash {
-        match self {
-            Self::Inner(inner_node) => inner_node.hash(),
-            Self::Leaf(leaf_node) => leaf_node.hash(),
-        }
-    }
-
-    pub fn version(&self) -> U63 {
-        match self {
-            Self::Inner(inner_node) => *inner_node.version(),
-            Self::Leaf(leaf_node) => *leaf_node.version(),
-        }
-    }
-
-    pub fn left(&self) -> Option<&Child> {
-        match self {
-            Self::Inner(inner_node) => Some(inner_node.left()),
-            Self::Leaf(_) => None,
-        }
-    }
-
-    pub fn right(&self) -> Option<&Child> {
-        match self {
-            Self::Inner(inner_node) => Some(inner_node.right()),
-            Self::Leaf(_) => None,
-        }
-    }
-
-    pub fn left_mut(&mut self) -> Option<&mut Child> {
-        match self {
-            Self::Inner(inner_node) => Some(inner_node.left_mut()),
-            Self::Leaf(_) => None,
-        }
-    }
-
-    pub fn right_mut(&mut self) -> Option<&mut Child> {
-        match self {
-            Self::Inner(inner_node) => Some(inner_node.right_mut()),
+            Self::Inner(inner) => Some(inner.right_mut()),
             Self::Leaf(_) => None,
         }
     }
 }
 
 impl SavedNode {
-    pub fn key(&self) -> &NonEmptyBz {
+    pub fn key(&self) -> NonEmptyBz<&Bytes> {
         match self {
-            Self::Inner(inner_node) => inner_node.key(),
-            Self::Leaf(leaf_node) => leaf_node.key(),
+            Self::Inner(inner) => inner.key().as_ref(),
+            Self::Leaf(leaf) => leaf.key().as_ref(),
         }
     }
 
     pub fn height(&self) -> U7 {
         match self {
-            Self::Inner(inner_node) => inner_node.height(),
+            Self::Inner(inner) => inner.height(),
             Self::Leaf(_) => LeafNode::<()>::HEIGHT,
         }
     }
 
     pub fn hash(&self) -> &NodeHash {
         match self {
-            Self::Inner(inner_node) => inner_node.hash(),
-            Self::Leaf(leaf_node) => leaf_node.hash(),
+            Self::Inner(inner) => inner.hash(),
+            Self::Leaf(leaf) => leaf.hash(),
         }
     }
 
     pub fn node_key(&self) -> NodeKey {
         match self {
-            SavedNode::Inner(inner_node) => inner_node.node_key(),
-            SavedNode::Leaf(leaf_node) => leaf_node.node_key(),
+            Self::Inner(inner) => inner.node_key(),
+            Self::Leaf(leaf) => leaf.node_key(),
         }
     }
 
     pub fn version(&self) -> U63 {
         match self {
-            Self::Inner(inner_node) => *inner_node.version(),
-            Self::Leaf(leaf_node) => *leaf_node.version(),
-        }
-    }
-
-    pub fn nonce(&self) -> U31 {
-        match self {
-            Self::Inner(inner_node) => *inner_node.nonce(),
-            Self::Leaf(leaf_node) => *leaf_node.nonce(),
+            Self::Inner(inner) => *inner.version(),
+            Self::Leaf(leaf) => *leaf.version(),
         }
     }
 
     pub fn size(&self) -> U63 {
         match self {
-            Self::Inner(inner_node) => inner_node.size(),
+            Self::Inner(inner) => inner.size(),
             Self::Leaf(_) => LeafNode::<()>::SIZE,
         }
     }
 
     pub fn left(&self) -> Option<&Child> {
         match self {
-            Self::Inner(inner_node) => Some(inner_node.left()),
+            Self::Inner(inner) => Some(inner.left()),
             Self::Leaf(_) => None,
         }
     }
 
     pub fn right(&self) -> Option<&Child> {
         match self {
-            Self::Inner(inner_node) => Some(inner_node.right()),
+            Self::Inner(inner) => Some(inner.right()),
             Self::Leaf(_) => None,
         }
     }
 
     pub fn left_mut(&mut self) -> Option<&mut Child> {
         match self {
-            Self::Inner(inner_node) => Some(inner_node.left_mut()),
+            Self::Inner(inner) => Some(inner.left_mut()),
             Self::Leaf(_) => None,
         }
     }
 
     pub fn right_mut(&mut self) -> Option<&mut Child> {
         match self {
-            Self::Inner(inner_node) => Some(inner_node.right_mut()),
+            Self::Inner(inner) => Some(inner.right_mut()),
             Self::Leaf(_) => None,
         }
     }
@@ -289,8 +209,8 @@ impl SavedNode {
         W: Write,
     {
         match self {
-            Self::Inner(inner_node) => inner_node.serialize(writer),
-            Self::Leaf(leaf_node) => leaf_node.serialize(writer),
+            Self::Inner(inner) => inner.serialize(writer),
+            Self::Leaf(leaf) => leaf.serialize(writer),
         }
     }
 }
@@ -298,8 +218,8 @@ impl SavedNode {
 impl From<DeserializedNode> for DraftedNode {
     fn from(node: DeserializedNode) -> Self {
         match node {
-            DeserializedNode::Inner(inner_node, _) => Self::Inner(inner_node),
-            DeserializedNode::Leaf(leaf_node) => Self::Leaf(leaf_node),
+            DeserializedNode::Inner(inner, _) => Self::Inner(inner),
+            DeserializedNode::Leaf(leaf) => Self::Leaf(leaf),
         }
     }
 }
@@ -319,8 +239,8 @@ impl From<InnerNode<Drafted>> for DraftedNode {
 impl From<&DraftedNode> for DraftedNode {
     fn from(node: &DraftedNode) -> Self {
         match node {
-            DraftedNode::Inner(inner_node) => Self::Inner(inner_node.into()),
-            DraftedNode::Leaf(leaf_node) => Self::Leaf(leaf_node.into()),
+            Self::Inner(inner_node) => Self::Inner(inner_node.into()),
+            Self::Leaf(leaf_node) => Self::Leaf(leaf_node.into()),
         }
     }
 }

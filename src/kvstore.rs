@@ -1,9 +1,10 @@
 #[cfg(feature = "redb")]
 pub mod redb;
 
-use core::error::Error;
+use core::{error::Error, ops::RangeBounds};
 
-use crate::types::NonEmptyBz;
+use bytes::Bytes;
+use nebz::NonEmptyBz;
 
 pub trait MutKVStore {
     type Error: Error + Send + Sync + 'static;
@@ -21,11 +22,11 @@ pub trait MutKVStore {
 pub trait KVStore {
     type Error: Error + Send + Sync + 'static;
 
-    fn get<K>(&self, key: NonEmptyBz<K>) -> Result<Option<NonEmptyBz>, Self::Error>
+    fn get<K>(&self, key: NonEmptyBz<K>) -> Result<Option<NonEmptyBz<Bytes>>, Self::Error>
     where
         K: AsRef<[u8]>;
 
-    fn has<K>(&self, key: NonEmptyBz) -> Result<bool, Self::Error>
+    fn has<K>(&self, key: NonEmptyBz<K>) -> Result<bool, Self::Error>
     where
         K: AsRef<[u8]>,
     {
@@ -36,5 +37,20 @@ pub trait KVStore {
 pub trait KVIterator {
     type Error: Error + Send + Sync + 'static;
 
-    fn next(&mut self) -> Result<Option<(NonEmptyBz, NonEmptyBz)>, Self::Error>;
+    type FetchError: Error + Send + Sync + 'static;
+
+    // TODO: reconsider the clippy lint when `type_alias_impl_trait` lands in stable.
+    // https://doc.rust-lang.org/beta/unstable-book/language-features/type-alias-impl-trait.html
+    #[allow(clippy::type_complexity)]
+    fn iter<'a, KR>(
+        &self,
+        range: KR,
+    ) -> Result<
+        impl DoubleEndedIterator<
+            Item = Result<(NonEmptyBz<Bytes>, NonEmptyBz<Bytes>), Self::FetchError>,
+        >,
+        Self::Error,
+    >
+    where
+        KR: RangeBounds<NonEmptyBz<&'a [u8]>>;
 }

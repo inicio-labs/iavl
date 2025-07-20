@@ -1,11 +1,15 @@
-use std::{borrow::Cow, sync::PoisonError};
+use std::sync::PoisonError;
 
-use crate::node::{InnerNodeError, NodeError, db::NodeDbError};
+use crate::node::{InnerNodeError, NodeError, ndb::NodeDbError};
 
 pub type Result<T, E = MutableTreeError> = core::result::Result<T, E>;
 
 #[derive(Debug, thiserror::Error)]
-pub enum MutableTreeError {
+#[error(transparent)]
+pub struct MutableTreeError(#[from] MutableTreeErrorKind);
+
+#[derive(Debug, thiserror::Error)]
+pub(crate) enum MutableTreeErrorKind {
     #[error("node db error: {0}")]
     NodeDb(#[from] NodeDbError),
 
@@ -18,9 +22,6 @@ pub enum MutableTreeError {
     #[error("conflicting root error")]
     ConflictingRoot,
 
-    #[error("invalid root error: {0}")]
-    InvalidRoot(Cow<'static, str>),
-
     #[error("inner node error: {0}")]
     InnerNode(#[from] InnerNodeError),
 
@@ -29,12 +30,9 @@ pub enum MutableTreeError {
 
     #[error("overflow error")]
     Overflow,
-
-    #[error("duplicate draft error")]
-    DuplicateDraft,
 }
 
-impl<T> From<PoisonError<T>> for MutableTreeError {
+impl<T> From<PoisonError<T>> for MutableTreeErrorKind {
     fn from(_err: PoisonError<T>) -> Self {
         Self::PoisonedLock
     }

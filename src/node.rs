@@ -1,48 +1,38 @@
-pub mod db;
 pub mod info;
+pub mod ndb;
 
 mod error;
 mod inner;
 mod kind;
 mod leaf;
 
-pub use self::{
+use bytes::Bytes;
+use nebz::NonEmptyBz;
+use oblux::{U7, U63};
+
+pub(crate) use self::{
     error::NodeError,
     inner::{Child, InnerNode, InnerNodeError},
-    kind::{DeserializedNode, DraftedNode, HashedNode, SavedNode},
+    kind::{DeserializedNode, DraftedNode, SavedNode},
     leaf::LeafNode,
 };
 
-use std::{
-    borrow::Cow,
-    sync::{Arc, RwLock},
-};
+use std::sync::{Arc, RwLock};
 
-use crate::{
-    NodeHash, NodeKey,
-    kvstore::KVStore,
-    types::{NonEmptyBz, U7, U63},
-};
+use super::{NodeHash, NodeKey, kvstore::KVStore};
 
-use self::{db::NodeDb, error::Result};
+use self::{error::Result, ndb::NodeDb};
 
 pub type ArlockNode = Arc<RwLock<Node>>;
 
-pub type ArlockSavedNode = Arc<RwLock<SavedNode>>;
-
-pub enum NovaNode {
-    Drafted(DraftedNode),
-    Saved(ArlockSavedNode),
-}
-
 #[derive(Debug)]
-pub enum Node {
+pub(crate) enum Node {
     Drafted(DraftedNode),
     Saved(SavedNode),
 }
 
 impl Node {
-    pub fn key(&self) -> &NonEmptyBz {
+    pub fn key(&self) -> NonEmptyBz<&Bytes> {
         match self {
             Self::Drafted(drafted) => drafted.key(),
             Self::Saved(saved) => saved.key(),
@@ -70,17 +60,10 @@ impl Node {
         }
     }
 
-    pub fn value(&self) -> Option<&NonEmptyBz> {
+    pub fn value(&self) -> Option<NonEmptyBz<&Bytes>> {
         match self {
-            Self::Drafted(DraftedNode::Leaf(leaf)) => Some(leaf.value()),
-            Self::Saved(SavedNode::Leaf(leaf)) => Some(leaf.value()),
-            _ => None,
-        }
-    }
-
-    pub fn as_drafted(&self) -> Option<&DraftedNode> {
-        match self {
-            Self::Drafted(drafted) => Some(drafted),
+            Self::Drafted(DraftedNode::Leaf(leaf)) => Some(leaf.value().as_ref()),
+            Self::Saved(SavedNode::Leaf(leaf)) => Some(leaf.value().as_ref()),
             _ => None,
         }
     }
@@ -131,30 +114,29 @@ impl Node {
         &self,
         ndb: &NodeDb<DB>,
         key: NonEmptyBz<K>,
-    ) -> Result<(U63, Option<Cow<'_, NonEmptyBz>>), NodeError>
+    ) -> Result<(U63, Option<NonEmptyBz<Bytes>>), NodeError>
     where
         K: AsRef<[u8]>,
         DB: KVStore,
     {
         // leaf node check
         if let Some(value) = self.value() {
-            if key.as_non_empty_slice() == self.key().as_non_empty_slice() {
-                return Ok((U63::MIN, Some(Cow::Borrowed(value))));
+            if key.as_ref_slice() == self.key().as_ref_slice() {
+                return Ok((U63::MIN, Some(value.cloned())));
             }
 
             return Ok((U63::MIN, None));
         }
 
         // unwrap is safe because self is inner node
-        if key.as_non_empty_slice() < self.key().as_non_empty_slice() {
+        if key.as_ref_slice() < self.key().as_ref_slice() {
             return self
                 .left()
                 .map(|left| left.fetch_full(ndb))
                 .transpose()?
                 .unwrap()
                 .read()?
-                .get(ndb, key)
-                .map(|(i, v)| (i, v.map(Cow::into_owned).map(Cow::Owned)));
+                .get(ndb, key);
         }
 
         // unwrap is safe because self is inner node
@@ -168,12 +150,13 @@ impl Node {
 
         right.get(ndb, key).map(|(i, v)| {
             (
+                // TODO: ascertain whether the index can exceed `U63` bounds.
                 // direct subtraction is safe because parent's size always exceeds that of the child
                 i.get()
                     .checked_add(self.size().get() - right_size)
                     .and_then(U63::new)
                     .unwrap(),
-                v.map(Cow::into_owned).map(Cow::Owned),
+                v,
             )
         })
     }

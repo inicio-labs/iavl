@@ -1,10 +1,13 @@
-use std::{borrow::Cow, sync::PoisonError};
+use std::sync::PoisonError;
+
+use bytes::Bytes;
+use nebz::NonEmptyBz;
+use oblux::U63;
 
 use crate::{
-    NodeHash,
+    Get, GetError, NodeHash, Sealed,
     kvstore::KVStore,
-    node::{ArlockNode, Node, NodeError, db::NodeDb},
-    types::{NonEmptyBz, U63},
+    node::{ArlockNode, NodeError, ndb::NodeDb},
 };
 
 #[derive(Debug, Clone)]
@@ -48,22 +51,36 @@ impl<DB> ImmutableTree<DB> {
         self.version
     }
 
+    pub(crate) fn set_version(&mut self, version: U63) {
+        self.version = version;
+    }
+
     fn root(&self) -> &ArlockNode {
         &self.root
     }
 }
 
-impl<DB> ImmutableTree<DB>
+impl<DB> Get for ImmutableTree<DB>
 where
     DB: KVStore,
 {
-    pub fn get<K>(&self, key: NonEmptyBz<K>) -> Result<(U63, Option<NonEmptyBz>), NodeError>
+    type Error = GetError;
+
+    type Value = Bytes;
+
+    fn get<K>(
+        &self,
+        key: NonEmptyBz<K>,
+    ) -> Result<(U63, Option<NonEmptyBz<Self::Value>>), Self::Error>
     where
         K: AsRef<[u8]>,
     {
         self.root()
-            .read()?
+            .read()
+            .map_err(NodeError::from)?
             .get(&self.ndb, key)
-            .map(|(idx, val)| (idx, val.map(Cow::into_owned)))
+            .map_err(From::from)
     }
 }
+
+impl<DB> Sealed for ImmutableTree<DB> {}

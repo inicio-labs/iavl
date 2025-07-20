@@ -1,6 +1,6 @@
 use std::{borrow::Cow, sync::PoisonError};
 
-use crate::node::db::NodeDbError;
+use crate::node::ndb::NodeDbError;
 
 pub type Result<T, E = InnerNodeError> = core::result::Result<T, E>;
 
