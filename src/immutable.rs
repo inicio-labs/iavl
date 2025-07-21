@@ -13,6 +13,7 @@ use crate::{
 #[derive(Debug, Clone)]
 pub struct ImmutableTree<DB> {
     root: ArlockNode,
+    size: U63,
     hash: NodeHash,
     ndb: NodeDb<DB>,
     version: U63,
@@ -26,15 +27,17 @@ impl<DB> ImmutableTree<DB> {
         ndb: NodeDb<DB>,
         version: U63,
     ) -> Result<Self, PoisonError<()>> {
-        let hash = root
-            .read()
-            .map_err(|_| PoisonError::new(()))?
-            .hash()
-            .cloned()
-            .expect("root must be hashed");
+        let (size, hash) = {
+            let groot = root.read().map_err(|_| PoisonError::new(()))?;
+            (
+                groot.size(),
+                groot.hash().cloned().expect("root must be hashed"),
+            )
+        };
 
         Ok(Self {
             root,
+            size,
             hash,
             ndb,
             version,
@@ -43,6 +46,10 @@ impl<DB> ImmutableTree<DB> {
 }
 
 impl<DB> ImmutableTree<DB> {
+    pub fn size(&self) -> U63 {
+        self.size
+    }
+
     pub fn hash(&self) -> NodeHash {
         self.hash
     }

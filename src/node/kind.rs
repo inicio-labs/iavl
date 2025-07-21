@@ -13,7 +13,7 @@ use crate::{
 };
 
 use super::{
-    ArlockNode, InnerNode, LeafNode, Node, NodeHash,
+    ArlockNode, InnerNode, InnerNodeError, LeafNode, Node, NodeHash,
     info::{Drafted, Saved},
     inner::Child,
 };
@@ -79,6 +79,25 @@ impl DeserializedNode {
             .build();
 
         Ok(Self::Inner(inner_node, node_hash))
+    }
+
+    pub fn into_saved_checked(self, nk: &NodeKey) -> Result<SavedNode, InnerNodeError> {
+        match self {
+            DeserializedNode::Inner(inner, hash) => {
+                let hashed = inner.to_hashed(*nk.version())?;
+
+                if hashed.hash() != &hash {
+                    return Err(InnerNodeError::Other("inconsistent hash".into()));
+                }
+
+                hashed.into_saved(*nk.nonce()).map(SavedNode::Inner)
+            }
+            DeserializedNode::Leaf(leaf) => {
+                let saved_leaf = leaf.to_hashed(*nk.version()).into_saved(*nk.nonce());
+
+                Ok(SavedNode::Leaf(saved_leaf))
+            }
+        }
     }
 }
 
@@ -215,15 +234,6 @@ impl SavedNode {
     }
 }
 
-impl From<DeserializedNode> for DraftedNode {
-    fn from(node: DeserializedNode) -> Self {
-        match node {
-            DeserializedNode::Inner(inner, _) => Self::Inner(inner),
-            DeserializedNode::Leaf(leaf) => Self::Leaf(leaf),
-        }
-    }
-}
-
 impl From<LeafNode<Drafted>> for DraftedNode {
     fn from(node: LeafNode<Drafted>) -> Self {
         Self::Leaf(node)
@@ -287,12 +297,6 @@ impl From<SavedNode> for Node {
     }
 }
 
-impl From<DeserializedNode> for Node {
-    fn from(node: DeserializedNode) -> Self {
-        Self::Drafted(node.into())
-    }
-}
-
 impl From<LeafNode<Drafted>> for Node {
     fn from(node: LeafNode<Drafted>) -> Self {
         DraftedNode::from(node).into()
@@ -325,12 +329,6 @@ impl From<DraftedNode> for ArlockNode {
 
 impl From<SavedNode> for ArlockNode {
     fn from(node: SavedNode) -> Self {
-        Node::from(node).into()
-    }
-}
-
-impl From<DeserializedNode> for ArlockNode {
-    fn from(node: DeserializedNode) -> Self {
         Node::from(node).into()
     }
 }

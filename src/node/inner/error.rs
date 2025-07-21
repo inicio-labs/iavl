@@ -26,6 +26,9 @@ pub enum InnerNodeError {
 
     #[error("overflow error")]
     Overflow,
+
+    #[error("other error: {0}")]
+    Other(Cow<'static, str>),
 }
 
 impl<T> From<PoisonError<T>> for InnerNodeError {

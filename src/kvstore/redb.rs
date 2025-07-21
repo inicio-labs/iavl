@@ -25,9 +25,14 @@ struct Key;
 struct Value;
 
 impl RedbStore {
-    pub fn new(db: Arc<Database>, table_name: &'static str) -> Self {
+    pub fn new(db: Arc<Database>, table_name: &'static str) -> Result<Self, RedbStoreError> {
         let table = TableDefinition::new(table_name);
-        Self { db, table }
+
+        let write_tx = db.begin_write()?;
+        write_tx.open_table(table)?;
+        write_tx.commit()?;
+
+        Ok(Self { db, table })
     }
 }
 

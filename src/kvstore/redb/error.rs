@@ -1,10 +1,10 @@
 #[derive(Debug, thiserror::Error)]
 pub enum RedbStoreError {
     #[error("database error: {0}")]
-    Database(#[from] redb::Error),
+    Database(Box<redb::Error>),
 
     #[error("transaction error: {0}")]
-    Transaction(#[from] redb::TransactionError),
+    Transaction(Box<redb::TransactionError>),
 
     #[error("table error: {0}")]
     Table(#[from] redb::TableError),
@@ -17,4 +17,16 @@ pub enum RedbStoreError {
 
     #[error("empty value error: value must not be empty")]
     EmptyValue,
+}
+
+impl From<redb::Error> for RedbStoreError {
+    fn from(err: redb::Error) -> Self {
+        Self::Database(Box::new(err))
+    }
+}
+
+impl From<redb::TransactionError> for RedbStoreError {
+    fn from(err: redb::TransactionError) -> Self {
+        Self::Transaction(Box::new(err))
+    }
 }

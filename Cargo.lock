@@ -255,6 +255,7 @@ dependencies = [
  "bon",
  "bytes",
  "const-hex",
+ "iavl",
  "integer-encoding",
  "nebz",
  "oblux",

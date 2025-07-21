@@ -112,14 +112,18 @@ impl InnerNode<Drafted> {
             let left_hash = *left
                 .read()?
                 .hash()
-                .inspect(|h| hasher.update(h))
+                .inspect(|&h| {
+                    encoding::serialize_hash(h, &mut hasher).unwrap();
+                })
                 .ok_or("inner node's children must be hashed".into())
                 .map_err(InnerNodeError::IntoHashed)?;
 
             let right_hash = *right
                 .read()?
                 .hash()
-                .inspect(|h| hasher.update(h))
+                .inspect(|&h| {
+                    encoding::serialize_hash(h, &mut hasher).unwrap();
+                })
                 .ok_or("inner node's children must be hashed".into())
                 .map_err(InnerNodeError::IntoHashed)?;
 
@@ -272,11 +276,12 @@ impl Child {
         };
 
         ndb.fetch_one_node(nk)?
-            .and_then(|node| match node {
-                FetchedNode::Deserialized(deserialized_node) => Some(deserialized_node),
+            .map(|node| match node {
+                FetchedNode::Deserialized(denode) => denode.into_saved_checked(nk),
                 _ => unreachable!(),
             })
-            .map(ArlockNode::from)
+            .transpose()?
+            .map(From::from)
             .ok_or(InnerNodeError::ChildNotFound)
     }
 

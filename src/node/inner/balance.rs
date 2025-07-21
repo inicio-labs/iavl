@@ -26,9 +26,11 @@ impl InnerNode<Drafted> {
                 Child::Part(nk) => ndb
                     .fetch_one_node(&nk)?
                     .map(|node| match node {
-                        FetchedNode::Deserialized(deserialized_node) => deserialized_node.into(),
+                        FetchedNode::Deserialized(denode) => denode.into_saved_checked(&nk),
                         _ => unreachable!(),
                     })
+                    .transpose()?
+                    .map(From::from)
                     .ok_or(InnerNodeError::ChildNotFound)?,
             };
 

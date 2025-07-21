@@ -9,7 +9,7 @@ pub use self::error::MutableTreeError;
 use core::{cmp, mem, ops::Deref};
 
 use crate::{
-    Sealed,
+    NodeHash, Sealed,
     kvstore::{KVIterator, KVStore, MutKVStore},
 };
 
@@ -30,9 +30,16 @@ pub struct MutableTree<DB> {
     last_saved: Option<ImmutableTree<DB>>,
     version: U63,
     ndb: NodeDb<DB>,
+    size: U63,
 }
 
 impl<DB> MutableTree<DB> {
+    const EMPTY_ROOT_HASH: NodeHash = [
+        0xE3, 0xB0, 0xC4, 0x42, 0x98, 0xFC, 0x1C, 0x14, 0x9A, 0xFB, 0xF4, 0xC8, 0x99, 0x6F, 0xB9,
+        0x24, 0x27, 0xAE, 0x41, 0xE4, 0x64, 0x9B, 0x93, 0x4C, 0xA4, 0x95, 0x99, 0x1B, 0x78, 0x52,
+        0xB8, 0x55,
+    ];
+
     pub fn new(db: DB) -> Self {
         Self::with_ndb(NodeDb::builder().db(db).build())
     }
@@ -45,12 +52,23 @@ impl<DB> MutableTree<DB> {
         self.version
     }
 
+    pub fn size(&self) -> U63 {
+        self.size
+    }
+
+    pub fn saved_hash(&self) -> NodeHash {
+        self.last_saved()
+            .map(ImmutableTree::hash)
+            .unwrap_or(Self::EMPTY_ROOT_HASH)
+    }
+
     fn with_ndb(ndb: NodeDb<DB>) -> Self {
         Self {
             root: None,
             last_saved: None,
             version: U63::MIN,
             ndb,
+            size: U63::MIN,
         }
     }
 
@@ -77,9 +95,15 @@ where
             .map_err(MutableTreeErrorKind::from)?
             .and_then(|node| match node {
                 FetchedNode::EmptyRoot => None,
-                FetchedNode::ReferenceRoot(original) => original.map(ArlockNode::from),
-                FetchedNode::Deserialized(deserialized_node) => Some(deserialized_node.into()),
+                FetchedNode::ReferenceRoot(original_denode) => {
+                    original_denode.map(|denode| denode.into_saved_checked(&root_nk))
+                }
+                FetchedNode::Deserialized(denode) => Some(denode.into_saved_checked(&root_nk)),
             })
+            .transpose()
+            .map_err(NodeError::from)
+            .map_err(MutableTreeErrorKind::from)?
+            .map(ArlockNode::from)
         else {
             return Ok(Self::with_ndb(ndb));
         };
@@ -91,11 +115,14 @@ where
             .build()
             .map_err(MutableTreeErrorKind::from)?;
 
+        let size = last_saved.size();
+
         Ok(Self {
             root: Some(root),
             last_saved: Some(last_saved),
             version: latest_version,
             ndb,
+            size,
         })
     }
 }
@@ -111,12 +138,22 @@ where
         let Some(root) = self.root.take() else {
             let leaf = LeafNode::builder().key(key).value(value).build();
             self.root = Some(leaf.into());
+            self.size = U63::ONE;
             return Ok(false);
         };
 
         let (new_root, updated) = recursive_insert(&root, &self.ndb, key, value)?;
 
         self.root = Some(new_root.into());
+
+        if !updated {
+            self.size = self
+                .size
+                .get()
+                .checked_add(1)
+                .and_then(U63::new)
+                .ok_or(MutableTreeErrorKind::Overflow)?;
+        }
 
         Ok(updated)
     }
@@ -136,10 +173,15 @@ where
 
         self.root = new_root;
 
+        if removed {
+            // unwrap is safe here because original size must be positive for a key to be removed
+            self.size = self.size.get().checked_sub(1).and_then(U63::new).unwrap();
+        }
+
         Ok(removed)
     }
 
-    pub fn save(&mut self) -> Result<()> {
+    pub fn save(&mut self) -> Result<U63> {
         let working_version = self
             .version()
             .get()
@@ -157,7 +199,7 @@ where
                 tree.set_version(working_version)
             }
 
-            return Ok(());
+            return Ok(working_version);
         };
 
         // TODO: devise a strategy to avoid creating new `DraftedNode` from `&DraftedNode`.
@@ -168,34 +210,28 @@ where
                     .save_overwriting_reference_root(working_version, self.version())
                     .map_err(MutableTreeErrorKind::from)?;
 
-                return Ok(());
+                return Ok(working_version);
             }
         };
 
-        let version = self
-            .last_saved()
-            .map(ImmutableTree::version)
-            .unwrap_or(U63::MIN)
-            .get()
-            .checked_add(1)
-            .and_then(U63::new)
-            .ok_or(MutableTreeErrorKind::Overflow)?;
-
         let mut nonce = U31::MIN;
         let new_root: ArlockNode =
-            recursive_make_saved_nodes(drafted, &self.ndb, version, &mut nonce)?.into();
+            recursive_make_saved_nodes(drafted, &self.ndb, working_version, &mut nonce)?.into();
 
         let new_last_saved = ImmutableTree::builder()
             .root(new_root.clone())
             .ndb(self.ndb.clone()) // TODO: devise a strategy to avoid `ndb`'s clone
-            .version(version)
+            .version(working_version)
             .build()
             .map_err(MutableTreeErrorKind::from)?;
 
         self.root = Some(new_root);
         self.last_saved = Some(new_last_saved);
+        self.version = working_version;
 
-        Ok(())
+        println!("tree = {:#?}", self.root.as_ref().unwrap());
+
+        Ok(working_version)
     }
 
     /// `root` must be of Saved type.
@@ -217,11 +253,14 @@ where
             .version(version)
             .build()?;
 
+        let size = last_saved.size();
+
         Ok(Self {
             root: Some(root),
             ndb,
             version,
             last_saved: Some(last_saved),
+            size,
         })
     }
 }
@@ -534,6 +573,7 @@ where
         }
     };
 
+    // TODO: remove this assert after save behaviour fully controlled
     assert!(ndb.save_non_overwririting_one_node(&saved)?.is_none());
 
     Ok(saved)
