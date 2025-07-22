@@ -161,9 +161,17 @@ impl SaveExpected {
     vec![Op::insert("radio", "control"), Op::Save],
     Terminal::insert("remote", "access", InsertExpected::new(false, 1, "access", 1, 2)),
 )]
+#[case::key_insert_with_smaller_idx_after_save(
+    vec![Op::insert("remote", "control"), Op::Save],
+    Terminal::insert("radio", "access", InsertExpected::new(false, 0, "access", 1, 2)),
+)]
 #[case::remove_nonexistent_key(
     vec![Op::insert("one", "plus"), Op::Save],
     Terminal::remove("nothing", RemoveExpected::new(false, 1, 1)),
+)]
+#[case::remove_existent_key(
+    vec![Op::insert("one", "plus"), Op::Save],
+    Terminal::remove("one", RemoveExpected::new(true, 1, 0)),
 )]
 #[case::save_empty_tree(
     vec![],
@@ -195,6 +203,103 @@ impl SaveExpected {
         SaveExpected::new(2, 2, "8CAD566B3364205E190849436169B33221AEA4D8756B26AA95501A428B7D3F96"),
     ),
 )]
+#[case::rr_heavy_leading_to_rotation_while_insertion_followed_by_save(
+    vec![
+        Op::insert("a", "a"),
+        Op::insert("b", "b"),
+        Op::insert("c", "c"),
+        Op::insert("d", "d"),
+    ],
+    Terminal::save(
+        SaveExpected::new(1, 4, "485D7790858F38EA5C608CFF83305F83A7CC2EE241271A5CFBDBA706D55F47A3"),
+    ),
+)]
+#[case::ll_heavy_leading_to_rotation_while_insertion_followed_by_save(
+    vec![
+        Op::insert("d", "d"),
+        Op::insert("c", "c"),
+        Op::insert("b", "b"),
+        Op::insert("a", "a"),
+    ],
+    Terminal::save(
+        SaveExpected::new(1, 4, "485D7790858F38EA5C608CFF83305F83A7CC2EE241271A5CFBDBA706D55F47A3"),
+    ),
+)]
+#[case::rl_heavy_leading_to_rotation_while_insertion_followed_by_save(
+    vec![
+        Op::insert("aaaa", "aaaa"),
+        Op::insert("bbbb", "bbbb"),
+        Op::insert("bbba", "bbba"),
+        Op::insert("bbaa", "bbaa"),
+    ],
+    Terminal::save(
+        SaveExpected::new(1, 4, "AD0807F99DBA64A0E85632BA7913A3571E3FD308360AEB766634BA3527FED951"),
+    ),
+)]
+#[case::lr_heavy_leading_to_rotation_while_insertion_followed_by_save(
+    vec![
+        Op::insert("bbbb", "bbbb"),
+        Op::insert("aaaa", "aaaa"),
+        Op::insert("aaab", "aaab"),
+        Op::insert("aabb", "aabb"),
+    ],
+    Terminal::save(
+        SaveExpected::new(1, 4, "734AC5490A25AC5CC90A0FC100BCAA60A83DB85ACC1EC9D6DFA4B92FADD372EF"),
+    )
+)]
+#[case::lr_heavy_leading_to_rotation_while_removal_followed_by_save(
+    vec![
+        Op::insert("a", "a"),
+        Op::insert("b", "b"),
+        Op::insert("c", "c"),
+        Op::insert("ab", "ab"),
+        Op::insert("ac", "ac"),
+        Op::remove("b"),
+    ],
+    Terminal::save(
+        SaveExpected::new(1, 4, "B1B4D5FE7FA82D832988FA7883C89D3C8EB84DE2877E671FA84F305B709D87E8"),
+    ),
+)]
+#[case::ll_heavy_leading_to_rotation_while_removal_followed_by_save(
+    vec![
+        Op::insert("bbbb", "bbbb"),
+        Op::insert("cccc", "cccc"),
+        Op::insert("ccca", "ccca"),
+        Op::insert("bbba", "bbba"),
+        Op::insert("bbaa", "bbaa"),
+        Op::remove("ccca"),
+    ],
+    Terminal::save(
+        SaveExpected::new(1, 4, "AE48105BE7F2E8F38F346B1F6E2358C716934F6055D53204CC3B4735D89DAC1F"),
+    ),
+)]
+#[case::rl_heavy_leading_to_rotation_while_removal_followed_by_save(
+    vec![
+       Op::insert("dddd", "dddd"),
+       Op::insert("a", "a"),
+       Op::insert("b", "b"),
+       Op::insert("dddc", "dddc"),
+       Op::insert("ddcc", "ddcc"),
+       Op::remove("a"),
+    ],
+    Terminal::save(
+        SaveExpected::new(1, 4, "D34E3D63F8940F7E02BC72009C776F7AB9A388C1740DF3AD2963F43C3C4312A8"),
+    ),
+)]
+#[case::rr_heavy_leading_to_rotation_while_removal_followed_by_save(
+    vec![
+        Op::insert("c", "c"),
+        Op::insert("b", "b"),
+        Op::insert("a", "a"),
+        Op::insert("d", "d"),
+        Op::insert("e", "e"),
+        Op::remove("a"),
+    ],
+    Terminal::save(
+        SaveExpected::new(1, 4, "BC2E621B1557CB8223797A64902F7BB01F582534B5CFE0A17509776BCA640924"),
+    ),
+)]
+
 fn insert_and_get_works(#[case] setup: Vec<Op>, #[case] terminal: Terminal) {
     // Arrange
     let mut tree = TestContext::new().tree;
