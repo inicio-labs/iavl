@@ -27,7 +27,9 @@ impl InnerNode<Drafted> {
                     .fetch_one_node(&nk)?
                     .map(|node| match node {
                         FetchedNode::Deserialized(denode) => denode.into_saved_checked(&nk),
-                        _ => unreachable!(),
+                        FetchedNode::EmptyRoot | FetchedNode::ReferenceRoot(_) => {
+                            Err(InnerNodeError::InvalidChild)
+                        }
                     })
                     .transpose()?
                     .map(From::from)
@@ -38,8 +40,9 @@ impl InnerNode<Drafted> {
         };
 
         let height_size_pair = |node: &ArlockNode| -> Result<_> {
-            let gnode = node.read()?;
-            Ok((gnode.height(), gnode.size()))
+            node.read()
+                .map(|gnode| (gnode.height(), gnode.size()))
+                .map_err(From::from)
         };
 
         let left = extract_full(self.left_mut())?;
@@ -58,11 +61,19 @@ impl InnerNode<Drafted> {
         }
 
         if diff > 1 {
-            let mut l_mut = left.write()?;
+            let mut gleft_mut = left.write()?;
 
             // unwrap is safe because left must be inner when diff > 1
-            let ll = l_mut.left_mut().map(extract_full).transpose()?.unwrap();
-            let lr = l_mut.right_mut().map(extract_full).transpose()?.unwrap();
+            let ll = gleft_mut.left_mut().map(extract_full).transpose()?.unwrap();
+            let lr = gleft_mut
+                .right_mut()
+                .map(extract_full)
+                .transpose()?
+                .unwrap();
+
+            // TODO: `gleft_mut` is unnecessarily mut beyond this.
+            // Downgrade to read guard when feature `rwlock_downgrade` lands in stable.
+            // https://github.com/rust-lang/rust/pull/143191
 
             let (ll_height, ll_size) = height_size_pair(&ll)?;
             let (lr_height, lr_size) = height_size_pair(&lr)?;
@@ -84,8 +95,6 @@ impl InnerNode<Drafted> {
                     let new_right_size = right_size
                         .get()
                         .checked_add(lr_size.get())
-                        .ok_or(InnerNodeError::Overflow)?
-                        .checked_add(1)
                         .and_then(U63::new)
                         .ok_or(InnerNodeError::Overflow)?;
 
@@ -110,13 +119,11 @@ impl InnerNode<Drafted> {
                     let new_root_size = ll_size
                         .get()
                         .checked_add(new_right.size().get())
-                        .ok_or(InnerNodeError::Overflow)?
-                        .checked_add(1)
                         .and_then(U63::new)
                         .ok_or(InnerNodeError::Overflow)?;
 
                     InnerNode::builder()
-                        .key(l_mut.key().cloned())
+                        .key(gleft_mut.key().cloned())
                         .height(new_root_height)
                         .size(new_root_size)
                         .left(Child::Full(ll))
@@ -129,10 +136,14 @@ impl InnerNode<Drafted> {
 
             // left-right case: one left rotation on left, and then one right rotation on self
 
-            let mut lr_mut = lr.write()?;
+            let mut glr_mut = lr.write()?;
 
-            let lrl = lr_mut.left_mut().map(extract_full).transpose()?.unwrap();
-            let lrr = lr_mut.right_mut().map(extract_full).transpose()?.unwrap();
+            let lrl = glr_mut.left_mut().map(extract_full).transpose()?.unwrap();
+            let lrr = glr_mut.right_mut().map(extract_full).transpose()?.unwrap();
+
+            // TODO: `glr_mut` is unnecessarily mut beyond this.
+            // Downgrade to read guard when feature `rwlock_downgrade` lands in stable.
+            // https://github.com/rust-lang/rust/pull/143191
 
             let (lrl_height, lrl_size) = height_size_pair(&lrl)?;
             let (lrr_height, lrr_size) = height_size_pair(&lrr)?;
@@ -149,13 +160,11 @@ impl InnerNode<Drafted> {
                 let new_left_size = ll_size
                     .get()
                     .checked_add(lrl_size.get())
-                    .ok_or(InnerNodeError::Overflow)?
-                    .checked_add(1)
                     .and_then(U63::new)
                     .ok_or(InnerNodeError::Overflow)?;
 
                 InnerNode::builder()
-                    .key(l_mut.key().cloned())
+                    .key(gleft_mut.key().cloned())
                     .height(new_left_height)
                     .size(new_left_size)
                     .left(Child::Full(ll))
@@ -175,8 +184,6 @@ impl InnerNode<Drafted> {
                 let new_right_size = lrr_size
                     .get()
                     .checked_add(right_size.get())
-                    .ok_or(InnerNodeError::Overflow)?
-                    .checked_add(1)
                     .and_then(U63::new)
                     .ok_or(InnerNodeError::Overflow)?;
 
@@ -202,13 +209,11 @@ impl InnerNode<Drafted> {
                     .size()
                     .get()
                     .checked_add(new_right.size().get())
-                    .ok_or(InnerNodeError::Overflow)?
-                    .checked_add(1)
                     .and_then(U63::new)
                     .ok_or(InnerNodeError::Overflow)?;
 
                 InnerNode::builder()
-                    .key(lr_mut.key().cloned())
+                    .key(glr_mut.key().cloned())
                     .height(new_root_height)
                     .size(new_root_size)
                     .left(Child::Full(DraftedNode::from(new_left).into()))
@@ -219,11 +224,23 @@ impl InnerNode<Drafted> {
             return Ok(Some(mem::replace(self, new_root)));
         }
 
-        let mut r_mut = right.write()?;
+        let mut gright_mut = right.write()?;
 
         // unwrap is safe because left must be inner when diff < -1
-        let rl = r_mut.left_mut().map(extract_full).transpose()?.unwrap();
-        let rr = r_mut.right_mut().map(extract_full).transpose()?.unwrap();
+        let rl = gright_mut
+            .left_mut()
+            .map(extract_full)
+            .transpose()?
+            .unwrap();
+        let rr = gright_mut
+            .right_mut()
+            .map(extract_full)
+            .transpose()?
+            .unwrap();
+
+        // TODO: `gright_mut` is unnecessarily mut beyond this.
+        // Downgrade to read guard when feature `rwlock_downgrade` lands in stable.
+        // https://github.com/rust-lang/rust/pull/143191
 
         let (rl_height, rl_size) = height_size_pair(&rl)?;
         let (rr_height, rr_size) = height_size_pair(&rr)?;
@@ -244,8 +261,6 @@ impl InnerNode<Drafted> {
                 let new_left_size = left_size
                     .get()
                     .checked_add(rl_size.get())
-                    .ok_or(InnerNodeError::Overflow)?
-                    .checked_add(1)
                     .and_then(U63::new)
                     .ok_or(InnerNodeError::Overflow)?;
 
@@ -270,13 +285,11 @@ impl InnerNode<Drafted> {
                 let new_root_size = rr_size
                     .get()
                     .checked_add(new_left.size().get())
-                    .ok_or(InnerNodeError::Overflow)?
-                    .checked_add(1)
                     .and_then(U63::new)
                     .ok_or(InnerNodeError::Overflow)?;
 
                 InnerNode::builder()
-                    .key(r_mut.key().cloned())
+                    .key(gright_mut.key().cloned())
                     .height(new_root_height)
                     .size(new_root_size)
                     .left(Child::Full(DraftedNode::from(new_left).into()))
@@ -289,10 +302,14 @@ impl InnerNode<Drafted> {
 
         // right-left case: one right rotation on right, and then one left rotation on self
 
-        let mut rl_mut = rl.write()?;
+        let mut grl_mut = rl.write()?;
 
-        let rll = rl_mut.left_mut().map(extract_full).transpose()?.unwrap();
-        let rlr = rl_mut.right_mut().map(extract_full).transpose()?.unwrap();
+        let rll = grl_mut.left_mut().map(extract_full).transpose()?.unwrap();
+        let rlr = grl_mut.right_mut().map(extract_full).transpose()?.unwrap();
+
+        // TODO: `grl_mut` is unnecessarily mut beyond this.
+        // Downgrade to read guard when feature `rwlock_downgrade` lands in stable.
+        // https://github.com/rust-lang/rust/pull/143191
 
         let (rll_height, rll_size) = height_size_pair(&rll)?;
         let (rlr_height, rlr_size) = height_size_pair(&rlr)?;
@@ -309,8 +326,6 @@ impl InnerNode<Drafted> {
             let new_left_size = left_size
                 .get()
                 .checked_add(rll_size.get())
-                .ok_or(InnerNodeError::Overflow)?
-                .checked_add(1)
                 .and_then(U63::new)
                 .ok_or(InnerNodeError::Overflow)?;
 
@@ -335,13 +350,11 @@ impl InnerNode<Drafted> {
             let new_right_size = rlr_size
                 .get()
                 .checked_add(rr_size.get())
-                .ok_or(InnerNodeError::Overflow)?
-                .checked_add(1)
                 .and_then(U63::new)
                 .ok_or(InnerNodeError::Overflow)?;
 
             InnerNode::builder()
-                .key(r_mut.key().cloned())
+                .key(gright_mut.key().cloned())
                 .height(new_right_height)
                 .size(new_right_size)
                 .left(Child::Full(rlr))
@@ -362,13 +375,11 @@ impl InnerNode<Drafted> {
                 .size()
                 .get()
                 .checked_add(new_right.size().get())
-                .ok_or(InnerNodeError::Overflow)?
-                .checked_add(1)
                 .and_then(U63::new)
                 .ok_or(InnerNodeError::Overflow)?;
 
             InnerNode::builder()
-                .key(rl_mut.key().cloned())
+                .key(grl_mut.key().cloned())
                 .height(new_root_height)
                 .size(new_root_size)
                 .left(Child::Full(DraftedNode::from(new_left).into()))

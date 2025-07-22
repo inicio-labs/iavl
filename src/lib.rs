@@ -4,7 +4,6 @@ mod encoding;
 mod immutable;
 mod mutable;
 mod node;
-mod traversal;
 
 pub use self::{
     immutable::ImmutableTree,

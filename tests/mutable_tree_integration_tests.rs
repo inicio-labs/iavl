@@ -195,7 +195,7 @@ impl SaveExpected {
         SaveExpected::new(2, 2, "8CAD566B3364205E190849436169B33221AEA4D8756B26AA95501A428B7D3F96"),
     ),
 )]
-fn insert_and_get_works(#[case] setup: Vec<Op>, #[case] terminal: Terminal) {
+fn terminal_tree_operation_post_setup_works(#[case] setup: Vec<Op>, #[case] terminal: Terminal) {
     // Arrange
     let mut tree = TestContext::new().tree;
 
