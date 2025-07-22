@@ -202,34 +202,46 @@ where
             return Ok(working_version);
         };
 
-        // TODO: devise a strategy to avoid creating new `DraftedNode` from `&DraftedNode`.
-        let drafted = match root.read().map_err(MutableTreeErrorKind::from)?.deref() {
-            Node::Drafted(drafted) => drafted.into(),
-            Node::Saved(_) => {
+        match root.read().map_err(MutableTreeErrorKind::from)?.deref() {
+            Node::Saved(saved) => {
                 self.ndb
-                    .save_overwriting_reference_root(working_version, self.version())
+                    .save_overwriting_reference_root(working_version, &saved.node_key())
                     .map_err(MutableTreeErrorKind::from)?;
+            }
+            Node::Drafted(drafted) => {
+                // TODO: devise a strategy to avoid creating new `DraftedNode` from `&DraftedNode`.
+                let drafted = drafted.into();
+                let mut nonce = U31::MIN;
+                let new_root: ArlockNode =
+                    recursive_make_saved_nodes(drafted, &self.ndb, working_version, &mut nonce)?
+                        .into();
+
+                let new_last_saved = ImmutableTree::builder()
+                    .root(new_root.clone())
+                    .ndb(self.ndb.clone()) // TODO: devise a strategy to avoid `ndb`'s clone
+                    .version(working_version)
+                    .build()
+                    .map_err(MutableTreeErrorKind::from)?;
+
+                self.root = Some(new_root);
+                self.last_saved = Some(new_last_saved);
+                self.version = working_version;
 
                 return Ok(working_version);
             }
         };
 
-        let mut nonce = U31::MIN;
-        let new_root: ArlockNode =
-            recursive_make_saved_nodes(drafted, &self.ndb, working_version, &mut nonce)?.into();
-
+        // TODO: devise a strategy to avoid these repetitive lines
         let new_last_saved = ImmutableTree::builder()
-            .root(new_root.clone())
+            .root(root.clone())
             .ndb(self.ndb.clone()) // TODO: devise a strategy to avoid `ndb`'s clone
             .version(working_version)
             .build()
             .map_err(MutableTreeErrorKind::from)?;
 
-        self.root = Some(new_root);
+        self.root = Some(root);
         self.last_saved = Some(new_last_saved);
         self.version = working_version;
-
-        println!("tree = {:#?}", self.root.as_ref().unwrap());
 
         Ok(working_version)
     }

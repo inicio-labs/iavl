@@ -183,6 +183,18 @@ impl SaveExpected {
         SaveExpected::new(1, 2, "24182B8FAA85723C2412F8048FB11969C8E793E84417EAD08919279469D59C1C"),
     ),
 )]
+#[case::save_tree_with_new_root_having_been_previously_saved(
+    vec![
+        Op::insert("london", "wheel"),
+        Op::insert("dublin", "spire"),
+        Op::insert("chicago", "bean"),
+        Op::Save,
+        Op::remove("london"),
+    ],
+    Terminal::save(
+        SaveExpected::new(2, 2, "8CAD566B3364205E190849436169B33221AEA4D8756B26AA95501A428B7D3F96"),
+    ),
+)]
 fn insert_and_get_works(#[case] setup: Vec<Op>, #[case] terminal: Terminal) {
     // Arrange
     let mut tree = TestContext::new().tree;

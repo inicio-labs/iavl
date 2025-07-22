@@ -33,7 +33,7 @@ impl<DB> NodeDb<DB> {
     // the serialized bytes of a node cannot start with byte value `0xFF` as it exceeds U7::MAX
     const EMPTY_ROOT_MARKER: u8 = u8::MAX;
 
-    const ROOT_NONCE: U31 = U31::ONE;
+    const NEW_ROOT_NONCE: U31 = U31::ONE;
 }
 
 impl<DB> NodeDb<DB>
@@ -136,10 +136,13 @@ where
     pub fn save_overwriting_reference_root(
         &self,
         version: U63,
-        original_version: U63,
+        original_nk: &NodeKey,
     ) -> Result<bool> {
+        let original_root_ndb_key =
+            NonEmptyBz::from_owned_array(encoding::make_ndb_key::<NODE_DB_KEY_PREFIX>(original_nk));
+
         self.db
-            .insert(root_ndb_key(version), root_ndb_key(original_version))
+            .insert(root_ndb_key(version), original_root_ndb_key)
             .map_err(From::from)
             .map_err(NodeDbError::Store)
     }
@@ -196,7 +199,7 @@ where
 }
 
 fn root_ndb_key(version: U63) -> NonEmptyBz<[u8; NODE_DB_KEY_LEN]> {
-    let nk = NodeKey::new(version, NodeDb::<()>::ROOT_NONCE);
+    let nk = NodeKey::new(version, NodeDb::<()>::NEW_ROOT_NONCE);
     let ndb_key_array = encoding::make_ndb_key::<NODE_DB_KEY_PREFIX>(&nk);
     NonEmptyBz::from_owned_array(ndb_key_array)
 }

@@ -104,7 +104,7 @@ impl InnerNode<Drafted> {
         let (hash, left_hash, right_hash) = {
             let mut hasher = Sha256::new();
 
-            // unwrap calls are safe because write on Sha256's hasher is infalliable
+            // unwrap calls are safe because write on Sha256's hasher is infallible
             hasher.write_varint(self.height.to_signed()).unwrap();
             hasher.write_varint(self.size.to_signed()).unwrap();
             hasher.write_varint(version.to_signed()).unwrap();
@@ -158,7 +158,7 @@ impl<K, VERSION, HASH, HAUX> InnerNode<Drafter<K, Hasher<VERSION, HASH, HAUX>>> 
             .map_err(InnerNodeError::IntoSaved)?;
 
         let right_nk = self
-            .left()
+            .right()
             .node_key()?
             .ok_or("child must yield node key".into())
             .map_err(InnerNodeError::IntoSaved)?;

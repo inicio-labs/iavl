@@ -60,7 +60,7 @@ impl LeafNode<Drafted> {
 
         hasher.update(Self::SUBTREE_HEIGHT_AND_SIZE_VARINT_ENCODED);
 
-        // unwrap calls are safe because write on Sha256's hasher is infalliable
+        // unwrap calls are safe because write on Sha256's hasher is infallible
 
         hasher.write_varint(version.to_signed()).unwrap();
 
