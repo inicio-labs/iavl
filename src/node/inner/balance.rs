@@ -27,7 +27,9 @@ impl InnerNode<Drafted> {
                     .fetch_one_node(&nk)?
                     .map(|node| match node {
                         FetchedNode::Deserialized(denode) => denode.into_saved_checked(&nk),
-                        _ => unreachable!(),
+                        FetchedNode::EmptyRoot | FetchedNode::ReferenceRoot(_) => {
+                            Err(InnerNodeError::InvalidChild)
+                        }
                     })
                     .transpose()?
                     .map(From::from)
@@ -38,8 +40,9 @@ impl InnerNode<Drafted> {
         };
 
         let height_size_pair = |node: &ArlockNode| -> Result<_> {
-            let gnode = node.read()?;
-            Ok((gnode.height(), gnode.size()))
+            node.read()
+                .map(|gnode| (gnode.height(), gnode.size()))
+                .map_err(From::from)
         };
 
         let left = extract_full(self.left_mut())?;
@@ -84,8 +87,6 @@ impl InnerNode<Drafted> {
                     let new_right_size = right_size
                         .get()
                         .checked_add(lr_size.get())
-                        .ok_or(InnerNodeError::Overflow)?
-                        .checked_add(1)
                         .and_then(U63::new)
                         .ok_or(InnerNodeError::Overflow)?;
 
@@ -110,8 +111,6 @@ impl InnerNode<Drafted> {
                     let new_root_size = ll_size
                         .get()
                         .checked_add(new_right.size().get())
-                        .ok_or(InnerNodeError::Overflow)?
-                        .checked_add(1)
                         .and_then(U63::new)
                         .ok_or(InnerNodeError::Overflow)?;
 
@@ -202,8 +201,6 @@ impl InnerNode<Drafted> {
                     .size()
                     .get()
                     .checked_add(new_right.size().get())
-                    .ok_or(InnerNodeError::Overflow)?
-                    .checked_add(1)
                     .and_then(U63::new)
                     .ok_or(InnerNodeError::Overflow)?;
 
@@ -244,8 +241,6 @@ impl InnerNode<Drafted> {
                 let new_left_size = left_size
                     .get()
                     .checked_add(rl_size.get())
-                    .ok_or(InnerNodeError::Overflow)?
-                    .checked_add(1)
                     .and_then(U63::new)
                     .ok_or(InnerNodeError::Overflow)?;
 
@@ -270,8 +265,6 @@ impl InnerNode<Drafted> {
                 let new_root_size = rr_size
                     .get()
                     .checked_add(new_left.size().get())
-                    .ok_or(InnerNodeError::Overflow)?
-                    .checked_add(1)
                     .and_then(U63::new)
                     .ok_or(InnerNodeError::Overflow)?;
 
@@ -309,8 +302,6 @@ impl InnerNode<Drafted> {
             let new_left_size = left_size
                 .get()
                 .checked_add(rll_size.get())
-                .ok_or(InnerNodeError::Overflow)?
-                .checked_add(1)
                 .and_then(U63::new)
                 .ok_or(InnerNodeError::Overflow)?;
 
@@ -335,8 +326,6 @@ impl InnerNode<Drafted> {
             let new_right_size = rlr_size
                 .get()
                 .checked_add(rr_size.get())
-                .ok_or(InnerNodeError::Overflow)?
-                .checked_add(1)
                 .and_then(U63::new)
                 .ok_or(InnerNodeError::Overflow)?;
 
@@ -362,8 +351,6 @@ impl InnerNode<Drafted> {
                 .size()
                 .get()
                 .checked_add(new_right.size().get())
-                .ok_or(InnerNodeError::Overflow)?
-                .checked_add(1)
                 .and_then(U63::new)
                 .ok_or(InnerNodeError::Overflow)?;
 

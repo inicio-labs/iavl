@@ -24,6 +24,9 @@ pub enum InnerNodeError {
     #[error("child not found error: children of inner node must exist")]
     ChildNotFound,
 
+    #[error("invalid child error: child of inner node must not be empty or reference root")]
+    InvalidChild,
+
     #[error("overflow error")]
     Overflow,
 

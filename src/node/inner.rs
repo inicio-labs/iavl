@@ -278,7 +278,9 @@ impl Child {
         ndb.fetch_one_node(nk)?
             .map(|node| match node {
                 FetchedNode::Deserialized(denode) => denode.into_saved_checked(nk),
-                _ => unreachable!(),
+                FetchedNode::EmptyRoot | FetchedNode::ReferenceRoot(_) => {
+                    Err(InnerNodeError::InvalidChild)
+                }
             })
             .transpose()?
             .map(From::from)

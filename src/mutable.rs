@@ -510,7 +510,7 @@ where
         .get()
         .checked_add(1)
         .and_then(U7::new)
-        .unwrap();
+        .ok_or(MutableTreeErrorKind::Overflow)?;
 
     let size = left
         .read()?
@@ -518,7 +518,7 @@ where
         .get()
         .checked_add(right.read()?.size().get())
         .and_then(U63::new)
-        .unwrap();
+        .ok_or(MutableTreeErrorKind::Overflow)?;
 
     let mut inner = InnerNode::builder()
         .key(gnode.key().cloned())
