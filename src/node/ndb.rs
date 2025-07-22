@@ -25,7 +25,7 @@ pub(crate) struct NodeDb<DB> {
 
 pub(crate) enum FetchedNode {
     EmptyRoot,
-    ReferenceRoot(Option<DeserializedNode>),
+    ReferenceRoot(NodeKey),
     Deserialized(DeserializedNode),
 }
 
@@ -41,50 +41,15 @@ where
     DB: KVStore,
 {
     pub fn fetch_one_node(&self, nk: &NodeKey) -> Result<Option<FetchedNode>> {
-        let fetch_ndb_value = |key: NonEmptyBz<&[u8]>| {
-            self.db
-                .get(key)
-                .map_err(From::from)
-                .map_err(NodeDbError::Store)
-        };
+        let ndb_key = encoding::make_ndb_key::<NODE_DB_KEY_PREFIX>(nk);
 
-        let key = encoding::make_ndb_key::<NODE_DB_KEY_PREFIX>(nk);
-
-        let Some(ndb_value) = fetch_ndb_value(NonEmptyBz::from_owned_array(key).as_ref_slice())?
-        else {
-            return Ok(None);
-        };
-
-        let node = match ndb_value.split_first() {
-            (Self::EMPTY_ROOT_MARKER, _) => FetchedNode::EmptyRoot,
-            (NODE_DB_KEY_PREFIX, mut version_nonce_bz) => {
-                // check if valid version
-                version_nonce_bz
-                    .try_get_u64()
-                    .ok()
-                    .and_then(U63::new)
-                    .ok_or(DeserializationError::InvalidInteger)?;
-
-                // check if valid nonce
-                version_nonce_bz
-                    .try_get_u32()
-                    .ok()
-                    .and_then(U31::new)
-                    .ok_or(DeserializationError::InvalidInteger)?;
-
-                let original = fetch_ndb_value(ndb_value.as_ref_slice())?
-                    .map(NonEmptyBz::into_inner)
-                    .as_deref()
-                    .map(DeserializedNode::deserialize)
-                    .transpose()?;
-
-                FetchedNode::ReferenceRoot(original)
-            }
-            _ => DeserializedNode::deserialize(ndb_value.into_inner().as_ref())
-                .map(FetchedNode::Deserialized)?,
-        };
-
-        Ok(Some(node))
+        self.db
+            .get(NonEmptyBz::from_owned_array(ndb_key))
+            .map_err(From::from)
+            .map_err(NodeDbError::Store)?
+            .map(make_fetched_node)
+            .transpose()
+            .map_err(From::from)
     }
 }
 
@@ -172,29 +137,93 @@ impl<DB> NodeDb<DB>
 where
     DB: KVIterator,
 {
-    pub fn latest_version(&self) -> Result<Option<U63>> {
-        let Some((ndb_key_bz, _)) = self
-            .db
-            .iter(NonEmptyBz::from_owned_array([NODE_DB_KEY_PREFIX]).as_ref_slice()..)
-            .map_err(From::from)
-            .map_err(NodeDbError::Store)?
-            .next_back()
-            .transpose()
-            .map_err(From::from)
-            .map_err(NodeDbError::Store)?
-        else {
-            return Ok(None);
+    pub fn fetch_latest_root_node(&self) -> Result<Option<(NodeKey, FetchedNode)>> {
+        let (root_ndb_key_bz, root_ndb_value_bz) = {
+            let Some((ndb_key_bz_max_version_max_nonce, _)) = self
+                .db
+                .iter(NonEmptyBz::from_owned_array([NODE_DB_KEY_PREFIX]).as_ref_slice()..)
+                .map_err(From::from)
+                .map_err(NodeDbError::Store)?
+                .next_back()
+                .transpose()
+                .map_err(From::from)
+                .map_err(NodeDbError::Store)?
+            else {
+                return Ok(None);
+            };
+
+            // TODO: ascertain if block expression can return early when retrieved nonce is 1
+
+            let prefix = ndb_key_bz_max_version_max_nonce
+                .get()
+                .get(..9)
+                .map(|bz| {
+                    let mut prefix = [0; 9];
+                    prefix.copy_from_slice(bz);
+
+                    NonEmptyBz::from_owned_array(prefix)
+                })
+                .ok_or(DeserializationError::InvalidInteger)?;
+
+            self.db
+                .iter(prefix.as_ref_slice()..)
+                .map_err(From::from)
+                .map_err(NodeDbError::Store)?
+                .next()
+                .transpose()
+                .map_err(From::from)
+                .map_err(NodeDbError::Store)?
+                .ok_or("must contain max version min nonce ndb key".into())
+                .map_err(NodeDbError::Store)?
         };
 
-        ndb_key_bz
-            .split_first()
-            .1
-            .try_get_u64()
-            .ok()
-            .and_then(U63::new)
-            .ok_or(DeserializationError::InvalidInteger)
-            .map(Some)
-            .map_err(From::from)
+        let nk = {
+            let (_, mut version_nonce_bz) = root_ndb_key_bz.split_first();
+
+            let version = version_nonce_bz
+                .try_get_u64()
+                .ok()
+                .and_then(U63::new)
+                .ok_or(DeserializationError::InvalidInteger)?;
+
+            let nonce = version_nonce_bz
+                .try_get_u32()
+                .ok()
+                .and_then(U31::new)
+                .ok_or(DeserializationError::InvalidInteger)?;
+
+            NodeKey::new(version, nonce)
+        };
+
+        Ok(Some((nk, make_fetched_node(root_ndb_value_bz)?)))
+    }
+}
+
+fn make_fetched_node<BZ>(ndb_value_bz: NonEmptyBz<BZ>) -> Result<FetchedNode, DeserializationError>
+where
+    BZ: AsRef<[u8]>,
+{
+    match ndb_value_bz.split_first() {
+        (NodeDb::<()>::EMPTY_ROOT_MARKER, _) => Ok(FetchedNode::EmptyRoot),
+        (NODE_DB_KEY_PREFIX, mut version_nonce_bz) => {
+            // check if valid version
+            let version = version_nonce_bz
+                .try_get_u64()
+                .ok()
+                .and_then(U63::new)
+                .ok_or(DeserializationError::InvalidInteger)?;
+
+            // check if valid nonce
+            let nonce = version_nonce_bz
+                .try_get_u32()
+                .ok()
+                .and_then(U31::new)
+                .ok_or(DeserializationError::InvalidInteger)?;
+
+            Ok(FetchedNode::ReferenceRoot(NodeKey::new(version, nonce)))
+        }
+        _ => DeserializedNode::deserialize(ndb_value_bz.get().as_ref())
+            .map(FetchedNode::Deserialized),
     }
 }
 

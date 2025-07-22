@@ -14,7 +14,7 @@ use crate::{
 };
 
 use super::{
-    Get, GetError, NodeKey,
+    Get, GetError,
     immutable::ImmutableTree,
     node::{ArlockNode, ndb::NodeDb},
     node::{
@@ -84,34 +84,38 @@ where
     pub fn load_latest_version(db: DB) -> Result<Self> {
         let ndb = NodeDb::builder().db(db).build();
 
-        let Some(latest_version) = ndb.latest_version().map_err(MutableTreeErrorKind::from)? else {
-            return Ok(Self::with_ndb(ndb));
-        };
-
-        let root_nk = NodeKey::new(latest_version, U31::ONE);
-
-        let Some(root) = ndb
-            .fetch_one_node(&root_nk)
+        let Some((latest_root_nk, latest_root_node)) = ndb
+            .fetch_latest_root_node()
             .map_err(MutableTreeErrorKind::from)?
-            .and_then(|node| match node {
-                FetchedNode::EmptyRoot => None,
-                FetchedNode::ReferenceRoot(original_denode) => {
-                    original_denode.map(|denode| denode.into_saved_checked(&root_nk))
-                }
-                FetchedNode::Deserialized(denode) => Some(denode.into_saved_checked(&root_nk)),
-            })
-            .transpose()
-            .map_err(NodeError::from)
-            .map_err(MutableTreeErrorKind::from)?
-            .map(ArlockNode::from)
         else {
             return Ok(Self::with_ndb(ndb));
         };
 
+        let root = match latest_root_node {
+            FetchedNode::EmptyRoot => return Ok(Self::with_ndb(ndb)),
+            FetchedNode::Deserialized(denode) => denode
+                .into_saved_checked(&latest_root_nk)
+                .map_err(MutableTreeErrorKind::from)?,
+            FetchedNode::ReferenceRoot(nk) => match ndb
+                .fetch_one_node(&nk)
+                .map_err(MutableTreeErrorKind::from)?
+            {
+                Some(node) => match node {
+                    FetchedNode::Deserialized(denode) => denode
+                        .into_saved_checked(&nk)
+                        .map_err(MutableTreeErrorKind::from)?,
+                    _ => Err(MutableTreeErrorKind::ConflictingRoot)?,
+                },
+                None => return Ok(Self::with_ndb(ndb)),
+            },
+        };
+
+        let root = ArlockNode::from(root);
+
         let last_saved = ImmutableTree::builder()
             .root(root.clone())
             .ndb(ndb.clone())
-            .version(latest_version)
+            .version(*latest_root_nk.version())
             .build()
             .map_err(MutableTreeErrorKind::from)?;
 
@@ -120,7 +124,7 @@ where
         Ok(Self {
             root: Some(root),
             last_saved: Some(last_saved),
-            version: latest_version,
+            version: *latest_root_nk.version(),
             ndb,
             size,
         })
@@ -506,7 +510,7 @@ where
         .get()
         .checked_add(1)
         .and_then(U7::new)
-        .unwrap();
+        .ok_or(MutableTreeErrorKind::Overflow)?;
 
     let size = left
         .read()?
@@ -514,7 +518,7 @@ where
         .get()
         .checked_add(right.read()?.size().get())
         .and_then(U63::new)
-        .unwrap();
+        .ok_or(MutableTreeErrorKind::Overflow)?;
 
     let mut inner = InnerNode::builder()
         .key(gnode.key().cloned())
