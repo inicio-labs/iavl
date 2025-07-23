@@ -3,13 +3,24 @@ name = "iavl"
 version = "0.1.0"
 edition = "2024"
 
+[features]
+default = []
+redb = ["dep:redb"]
+
 [dependencies]
-prost = "0.13.5"
-sha2 = "0.10.9"
-thiserror = "2.0.12"
-zigzag = "0.1.0"
+bon = "3.5"
+bytes = "1.10"
+integer-encoding = "4"
+nebz = { version = "0.2.0", features = ["bytes"] }
+oblux = "0.1.0"
+redb = { version = "2.6", optional = true }
+sha2 = "0.10"
+thiserror = "2"
 
 [dev-dependencies]
-hex = "0.4.3"
-rand = "0.9.1"
+iavl = { path = ".", features = ["redb"] }
+
+anyhow = "1"
+const-hex = "1"
+rand = "0.9"
 rstest = "0.25"
