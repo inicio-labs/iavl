@@ -1,6 +1,6 @@
 [package]
 name = "iavl"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 edition = "2024"
 
 [features]
@@ -20,7 +20,6 @@ thiserror = "2"
 [dev-dependencies]
 iavl = { path = ".", features = ["redb"] }
 
-anyhow = "1"
 const-hex = "1"
 rand = "0.9"
 rstest = "0.25"
