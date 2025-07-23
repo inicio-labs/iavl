@@ -10,30 +10,30 @@ pub struct MutableTreeError(#[from] MutableTreeErrorKind);
 
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum MutableTreeErrorKind {
-    #[error("node db error: {0}")]
-    NodeDb(#[from] NodeDbError),
+	#[error("node db error: {0}")]
+	NodeDb(#[from] NodeDbError),
 
-    #[error("node error: {0}")]
-    Node(#[from] NodeError),
+	#[error("node error: {0}")]
+	Node(#[from] NodeError),
 
-    #[error("missing node key error")]
-    MissingNodeKey,
+	#[error("missing node key error")]
+	MissingNodeKey,
 
-    #[error("conflicting root error")]
-    ConflictingRoot,
+	#[error("conflicting root error")]
+	ConflictingRoot,
 
-    #[error("inner node error: {0}")]
-    InnerNode(#[from] InnerNodeError),
+	#[error("inner node error: {0}")]
+	InnerNode(#[from] InnerNodeError),
 
-    #[error("poisoned lock error")]
-    PoisonedLock,
+	#[error("poisoned lock error")]
+	PoisonedLock,
 
-    #[error("overflow error")]
-    Overflow,
+	#[error("overflow error")]
+	Overflow,
 }
 
 impl<T> From<PoisonError<T>> for MutableTreeErrorKind {
-    fn from(_err: PoisonError<T>) -> Self {
-        Self::PoisonedLock
-    }
+	fn from(_err: PoisonError<T>) -> Self {
+		Self::PoisonedLock
+	}
 }

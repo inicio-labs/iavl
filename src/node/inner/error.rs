@@ -6,36 +6,36 @@ pub type Result<T, E = InnerNodeError> = core::result::Result<T, E>;
 
 #[derive(Debug, thiserror::Error)]
 pub enum InnerNodeError {
-    #[error("into hashed error: {0}")]
-    IntoHashed(Cow<'static, str>),
+	#[error("into hashed error: {0}")]
+	IntoHashed(Cow<'static, str>),
 
-    #[error("into saved error: {0}")]
-    IntoSaved(Cow<'static, str>),
+	#[error("into saved error: {0}")]
+	IntoSaved(Cow<'static, str>),
 
-    #[error("poisoned lock error: lock must not be poisoned")]
-    PoisonedLock,
+	#[error("poisoned lock error: lock must not be poisoned")]
+	PoisonedLock,
 
-    #[error("node db error: {0}")]
-    NodeDb(#[from] NodeDbError),
+	#[error("node db error: {0}")]
+	NodeDb(#[from] NodeDbError),
 
-    #[error("child absent error: no child present in inner node")]
-    ChildAbsent,
+	#[error("child absent error: no child present in inner node")]
+	ChildAbsent,
 
-    #[error("child not found error: children of inner node must exist")]
-    ChildNotFound,
+	#[error("child not found error: children of inner node must exist")]
+	ChildNotFound,
 
-    #[error("invalid child error: child of inner node must not be empty or reference root")]
-    InvalidChild,
+	#[error("invalid child error: child of inner node must not be empty or reference root")]
+	InvalidChild,
 
-    #[error("overflow error")]
-    Overflow,
+	#[error("overflow error")]
+	Overflow,
 
-    #[error("other error: {0}")]
-    Other(Cow<'static, str>),
+	#[error("other error: {0}")]
+	Other(Cow<'static, str>),
 }
 
 impl<T> From<PoisonError<T>> for InnerNodeError {
-    fn from(_err: PoisonError<T>) -> Self {
-        Self::PoisonedLock
-    }
+	fn from(_err: PoisonError<T>) -> Self {
+		Self::PoisonedLock
+	}
 }
