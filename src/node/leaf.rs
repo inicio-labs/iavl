@@ -19,7 +19,7 @@ type SavedLeafNode<K, V, VERSION, HASH, HAUX, NONCE> =
 	LeafNode<Drafter<K, Hasher<VERSION, HASH, HAUX, Saver<NONCE>>>, V>;
 
 #[derive(Debug, Clone)]
-pub(crate) struct LeafNode<INFO, V = NonEmptyBz<Bytes>> {
+pub(crate) struct LeafNode<INFO, V = Bytes> {
 	info: INFO,
 	value: V,
 }
@@ -46,7 +46,7 @@ impl<INFO, V> LeafNode<INFO, V> {
 #[bon::bon]
 impl LeafNode<Drafted> {
 	#[builder]
-	pub fn new(key: NonEmptyBz<Bytes>, value: NonEmptyBz<Bytes>) -> Self {
+	pub fn new(key: NonEmptyBz<Bytes>, value: Bytes) -> Self {
 		Self { info: Drafted::new(key), value }
 	}
 }
@@ -64,7 +64,7 @@ impl LeafNode<Drafted> {
 		hasher.write_varint(self.key().len().get()).unwrap();
 		hasher.update(self.key().get());
 
-		encoding::serialize_hash(&Sha256::digest(self.value().get()).into(), &mut hasher).unwrap();
+		encoding::serialize_hash(&Sha256::digest(self.value()).into(), &mut hasher).unwrap();
 
 		LeafNode {
 			info: self.info.clone().into_hashed(version, hasher.finalize().into(), ()),
@@ -73,7 +73,7 @@ impl LeafNode<Drafted> {
 	}
 }
 
-impl<K, V, STAGE> LeafNode<Drafter<NonEmptyBz<K>, STAGE>, NonEmptyBz<V>>
+impl<K, V, STAGE> LeafNode<Drafter<NonEmptyBz<K>, STAGE>, V>
 where
 	K: AsRef<[u8]>,
 	V: AsRef<[u8]>,
@@ -84,13 +84,13 @@ where
 	{
 		writer.write_all(&Self::SUBTREE_HEIGHT_AND_SIZE_VARINT_ENCODED)?;
 
-		let key_bytes_len = encoding::serialize_nebz(self.key().as_ref(), &mut writer)?;
-		let value_bytes_len = encoding::serialize_nebz(self.value().as_ref(), writer)?;
+		let key_bytes_len = encoding::serialize_bytes(self.key().get().as_ref(), &mut writer)?;
+		let value_bytes_len = encoding::serialize_bytes(self.value().as_ref(), writer)?;
 
 		Self::SUBTREE_HEIGHT_AND_SIZE_VARINT_ENCODED
 			.len()
-			.checked_add(key_bytes_len.get())
-			.and_then(|len| len.checked_add(value_bytes_len.get()))
+			.checked_add(key_bytes_len)
+			.and_then(|len| len.checked_add(value_bytes_len))
 			.and_then(NonZeroUsize::new)
 			.ok_or(SerializationError::Overflow)
 	}
@@ -150,6 +150,7 @@ mod tests {
 	use super::*;
 
 	mod utils {
+		use bytes::Bytes;
 		use nebz::NonEmptyBz;
 		use oblux::{U31, U63};
 
@@ -165,7 +166,7 @@ mod tests {
 		{
 			LeafNode::builder()
 				.key(NonEmptyBz::new(key.as_ref()).map(From::from).unwrap())
-				.value(NonEmptyBz::new(value.as_ref()).map(From::from).unwrap())
+				.value(Bytes::copy_from_slice(value.as_ref()))
 				.build()
 		}
 
@@ -187,7 +188,7 @@ mod tests {
 		"00020568656c6c6f05776f726c64"
 	)]
 	fn serialize_works_with_infallible_writer<K, V, STAGE, HEX>(
-		#[case] node: LeafNode<Drafter<NonEmptyBz<K>, STAGE>, NonEmptyBz<V>>,
+		#[case] node: LeafNode<Drafter<NonEmptyBz<K>, STAGE>, V>,
 		#[case] hex_serialized: HEX,
 	) where
 		K: AsRef<[u8]>,

@@ -19,8 +19,8 @@ pub enum DeserializationError {
 	#[error("invalid integer error")]
 	InvalidInteger,
 
-	#[error("zero prefix length error")]
-	ZeroPrefixLength,
+	#[error("zero length key error")]
+	ZeroLengthKey,
 
 	#[error("prefix length mismatch error")]
 	PrefixLengthMismatch,

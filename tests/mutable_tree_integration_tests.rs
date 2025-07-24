@@ -15,7 +15,7 @@ use self::common::utils;
 enum Op {
 	Insert {
 		key: NonEmptyBz<Bytes>,
-		value: NonEmptyBz<Bytes>,
+		value: Bytes,
 	},
 	Remove(NonEmptyBz<Bytes>),
 	Save,
@@ -24,7 +24,7 @@ enum Op {
 enum Terminal {
 	Insert {
 		key: NonEmptyBz<Bytes>,
-		value: NonEmptyBz<Bytes>,
+		value: Bytes,
 		expected: InsertExpected,
 	},
 	Remove {
@@ -39,7 +39,7 @@ enum Terminal {
 struct InsertExpected {
 	updated: bool,
 	idx: U63,
-	value: Option<NonEmptyBz<Bytes>>,
+	value: Option<Bytes>,
 	version: U63,
 	size: U63,
 }
@@ -62,7 +62,10 @@ impl Op {
 		K: AsRef<[u8]>,
 		V: AsRef<[u8]>,
 	{
-		Self::Insert { key: utils::make_nebz_bytes(key), value: utils::make_nebz_bytes(value) }
+		Self::Insert {
+			key: utils::make_nebz_bytes(key),
+			value: Bytes::copy_from_slice(value.as_ref()),
+		}
 	}
 
 	fn remove<K>(key: K) -> Self
@@ -81,7 +84,7 @@ impl Terminal {
 	{
 		Self::Insert {
 			key: utils::make_nebz_bytes(key),
-			value: utils::make_nebz_bytes(value),
+			value: Bytes::copy_from_slice(value.as_ref()),
 			expected,
 		}
 	}
@@ -106,7 +109,7 @@ impl InsertExpected {
 		Self {
 			updated,
 			idx: U63::new(idx).unwrap(),
-			value: value.into().map(utils::make_nebz_bytes),
+			value: value.into().as_ref().map(AsRef::as_ref).map(Bytes::copy_from_slice),
 			version: U63::new(version).unwrap(),
 			size: U63::new(size).unwrap(),
 		}
@@ -134,6 +137,10 @@ impl SaveExpected {
 #[case::new_key_insertion(
     vec![],
     Terminal::insert("perfect", "blue", InsertExpected::new(false, 0, "blue", 0, 1)),
+)]
+#[case::key_insert_with_empty_value(
+	vec![],
+	Terminal::insert("only", "", InsertExpected::new(false, 0, "", 0, 1))
 )]
 #[case::key_update_same_version(
     vec![Op::insert("log", "in")],

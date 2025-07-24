@@ -177,7 +177,7 @@ where
 		let height_bytes_len = writer.write_varint(self.height().to_signed())?;
 		let size_bytes_len = writer.write_varint(self.size().to_signed())?;
 
-		let key_bytes_len = encoding::serialize_nebz(self.key().as_ref(), &mut writer)?;
+		let key_bytes_len = encoding::serialize_bytes(self.key().get().as_ref(), &mut writer)?;
 		let hash_bytes_len = encoding::serialize_hash(self.hash(), &mut writer)?;
 
 		// TODO: ascertain whether zig-zag encoding is needed
@@ -197,6 +197,7 @@ where
 					+ left_nk_bytes_len.get()
 					+ right_nk_bytes_len.get(),
 			)
+			.and_then(NonZeroUsize::new)
 			.ok_or(SerializationError::Overflow)
 	}
 }

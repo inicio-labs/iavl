@@ -128,7 +128,7 @@ where
 	/// Inserts/updates the node with given key-value pair.
 	///
 	/// Returns [`true`] if an existing key is updated.
-	pub fn insert(&mut self, key: NonEmptyBz<Bytes>, value: NonEmptyBz<Bytes>) -> Result<bool> {
+	pub fn insert(&mut self, key: NonEmptyBz<Bytes>, value: Bytes) -> Result<bool> {
 		let Some(root) = self.root.take() else {
 			let leaf = LeafNode::builder().key(key).value(value).build();
 			self.root = Some(leaf.into());
@@ -273,10 +273,7 @@ where
 
 	type Value = Bytes;
 
-	fn get<K>(
-		&self,
-		key: NonEmptyBz<K>,
-	) -> Result<(U63, Option<NonEmptyBz<Self::Value>>), Self::Error>
+	fn get<K>(&self, key: NonEmptyBz<K>) -> Result<(U63, Option<Self::Value>), Self::Error>
 	where
 		K: AsRef<[u8]>,
 	{
@@ -432,7 +429,7 @@ fn recursive_insert<DB>(
 	node: &ArlockNode,
 	ndb: &NodeDb<DB>,
 	key: NonEmptyBz<Bytes>,
-	value: NonEmptyBz<Bytes>,
+	value: Bytes,
 ) -> Result<(DraftedNode, bool), MutableTreeErrorKind>
 where
 	DB: KVStore,
@@ -564,7 +561,7 @@ fn handle_leaf_insert_case(
 	node: &ArlockNode,
 	existing_key: NonEmptyBz<&Bytes>,
 	new_key: NonEmptyBz<Bytes>,
-	new_value: NonEmptyBz<Bytes>,
+	new_value: Bytes,
 ) -> Result<DraftedNode, MutableTreeErrorKind> {
 	let new_leaf = LeafNode::builder().key(new_key).value(new_value).build();
 

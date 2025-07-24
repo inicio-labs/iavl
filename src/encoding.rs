@@ -29,21 +29,21 @@ where
 	reader.read_exact(&mut hash).map(|_| hash).map_err(From::from)
 }
 
-pub fn deserialize_bytes<R>(mut reader: R) -> Result<NonEmptyBz<Bytes>, DeserializationError>
+pub fn deserialize_nebz<R>(mut reader: R) -> Result<Option<NonEmptyBz<Bytes>>, DeserializationError>
 where
 	R: Read,
 {
 	reader.read_varint::<u64>().map_err(From::from).and_then(|len| {
 		if len == 0 {
-			return Err(DeserializationError::ZeroPrefixLength);
+			return Ok(None);
 		}
 
 		let mut buf = BytesMut::with_capacity(len.try_into()?).writer();
 
-		// unwrap is safe because len > 0
 		io::copy(&mut reader.by_ref().take(len), &mut buf)?
 			.eq(&len)
-			.then(|| NonEmptyBz::new(buf.into_inner().freeze()).unwrap())
+			.then(|| buf.into_inner().freeze())
+			.map(NonEmptyBz::new)
 			.ok_or(DeserializationError::PrefixLengthMismatch)
 	})
 }
@@ -63,16 +63,12 @@ where
 	Ok(SHA256_HASH_LEN.checked_add(sha256_hash_len_bytes).unwrap())
 }
 
-pub fn serialize_nebz<W, BZ>(
-	bz: NonEmptyBz<BZ>,
-	mut writer: W,
-) -> Result<NonZeroUsize, SerializationError>
+pub fn serialize_bytes<W>(bz: &[u8], mut writer: W) -> Result<usize, SerializationError>
 where
 	W: Write,
-	BZ: AsRef<[u8]>,
 {
-	let prefix_len_bytes = writer.write_varint(bz.len().get())?;
-	writer.write_all(bz.get().as_ref())?;
+	let prefix_len_bytes = writer.write_varint(bz.len())?;
+	writer.write_all(bz)?;
 
 	bz.len().checked_add(prefix_len_bytes).ok_or(SerializationError::Overflow)
 }
