@@ -7,8 +7,58 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+<csr-id-0010cd0f5050caac05506caf6c82dcfd924bab08/>
+<csr-id-bf58425d78dd56648eea9c412a7fe0ab2100dce9/>
+
 ### Chore
 
+ - <csr-id-0010cd0f5050caac05506caf6c82dcfd924bab08/> assign v0.1.0-alpha as version
+
+### New Features (BREAKING)
+
+ - <csr-id-00b34e5714002f00b84f74eff3393e412c73e977/> allow empty leaf values
+
+### Chore
+
+ - <csr-id-7980998d5b3eba35eda83f9fada33a5c3cae4cba/> add Cargo.lock to gitignore and bump version to v0.1.0-alpha.2
+
+### New Features
+
+ - <csr-id-a36987b375cf7a5547df9a4b975113ffeed0f322/> tests
+ - <csr-id-bff07362776fef321703de7bd9f35cffeb59d843/> key_formats
+ - <csr-id-dc4333490421475845b6c61139468569d19296cd/> node and node_key, codec
+
+### Other
+
+ - <csr-id-bf58425d78dd56648eea9c412a7fe0ab2100dce9/> code
+
+### Commit Statistics
+
+<csr-read-only-do-not-edit/>
+
+ - 4 commits contributed to the release over the course of 1 calendar day.
+ - 1 day passed between releases.
+ - 2 commits were understood as [conventional](https://www.conventionalcommits.org).
+ - 0 issues like '(#ID)' were seen in commit messages
+
+### Commit Details
+
+<csr-read-only-do-not-edit/>
+
+<details><summary>view details</summary>
+
+ * **Uncategorized**
+    - Add Cargo.lock to gitignore and bump version to v0.1.0-alpha.2 ([`7980998`](https://github.com/inicio-labs/iavl/commit/7980998d5b3eba35eda83f9fada33a5c3cae4cba))
+    - Merge pull request #3 from inicio-labs/hubcycle/allow-empty-leaf-value ([`ac2480d`](https://github.com/inicio-labs/iavl/commit/ac2480d82fca23f468ae2a48c01b7b8dfb1bc239))
+    - Allow empty leaf values ([`00b34e5`](https://github.com/inicio-labs/iavl/commit/00b34e5714002f00b84f74eff3393e412c73e977))
+    - Merge pull request #2 from inicio-labs/pre-release/v0.1.0-alpha ([`3c7b4d1`](https://github.com/inicio-labs/iavl/commit/3c7b4d1a2c7b3efe82ffde68471dcda20732ea2b))
+</details>
+
+## 0.1.0-alpha.1 (2025-07-23)
+
+### Chore
+
+ - <csr-id-9cb8d6c49375aae22ab05d284d80e0b95d0bbe90/> add changelog for v0.1.0-alpha.1
  - <csr-id-0010cd0f5050caac05506caf6c82dcfd924bab08/> assign v0.1.0-alpha as version
 
 ### New Features
@@ -25,8 +75,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <csr-read-only-do-not-edit/>
 
- - 20 commits contributed to the release over the course of 63 calendar days.
- - 5 commits were understood as [conventional](https://www.conventionalcommits.org).
+ - 21 commits contributed to the release over the course of 63 calendar days.
+ - 6 commits were understood as [conventional](https://www.conventionalcommits.org).
  - 0 issues like '(#ID)' were seen in commit messages
 
 ### Commit Details
@@ -36,6 +86,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 <details><summary>view details</summary>
 
  * **Uncategorized**
+    - Add changelog for v0.1.0-alpha.1 ([`9cb8d6c`](https://github.com/inicio-labs/iavl/commit/9cb8d6c49375aae22ab05d284d80e0b95d0bbe90))
     - Assign v0.1.0-alpha as version ([`0010cd0`](https://github.com/inicio-labs/iavl/commit/0010cd0f5050caac05506caf6c82dcfd924bab08))
     - Merge pull request #1 from inicio-labs/anshal/add-tests ([`bb14c92`](https://github.com/inicio-labs/iavl/commit/bb14c9299a1789f0d1ca3d31c4a2869663d149c7))
     - Tests ([`a36987b`](https://github.com/inicio-labs/iavl/commit/a36987b375cf7a5547df9a4b975113ffeed0f322))
