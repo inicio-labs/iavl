@@ -51,10 +51,13 @@ impl DeserializedNode {
 			.map(U63::from_signed)?
 			.ok_or(DeserializationError::InvalidInteger)?;
 
-		let key = encoding::deserialize_bytes(&mut reader)?;
+		let key =
+			encoding::deserialize_nebz(&mut reader)?.ok_or(DeserializationError::ZeroLengthKey)?;
 
 		if height.get() == 0 {
-			let value = encoding::deserialize_bytes(&mut reader)?;
+			let value = encoding::deserialize_nebz(&mut reader)?
+				.map(NonEmptyBz::into_inner)
+				.unwrap_or(Bytes::new());
 
 			let node = LeafNode::builder().key(key).value(value).build();
 

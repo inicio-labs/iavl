@@ -60,10 +60,10 @@ impl Node {
 		}
 	}
 
-	pub fn value(&self) -> Option<NonEmptyBz<&Bytes>> {
+	pub fn value(&self) -> Option<&Bytes> {
 		match self {
-			Self::Drafted(DraftedNode::Leaf(leaf)) => Some(leaf.value().as_ref()),
-			Self::Saved(SavedNode::Leaf(leaf)) => Some(leaf.value().as_ref()),
+			Self::Drafted(DraftedNode::Leaf(leaf)) => Some(leaf.value()),
+			Self::Saved(SavedNode::Leaf(leaf)) => Some(leaf.value()),
 			_ => None,
 		}
 	}
@@ -114,7 +114,7 @@ impl Node {
 		&self,
 		ndb: &NodeDb<DB>,
 		key: NonEmptyBz<K>,
-	) -> Result<(U63, Option<NonEmptyBz<Bytes>>), NodeError>
+	) -> Result<(U63, Option<Bytes>), NodeError>
 	where
 		K: AsRef<[u8]>,
 		DB: KVStore,
@@ -122,7 +122,7 @@ impl Node {
 		// leaf node check
 		if let Some(value) = self.value() {
 			if key.as_ref_slice() == self.key().as_ref_slice() {
-				return Ok((U63::MIN, Some(value.cloned())));
+				return Ok((U63::MIN, Some(value.clone())));
 			}
 
 			return Ok((U63::MIN, None));

@@ -38,10 +38,7 @@ pub trait Get: Sealed {
 	type Value: AsRef<[u8]>;
 
 	#[allow(clippy::type_complexity)]
-	fn get<K>(
-		&self,
-		key: NonEmptyBz<K>,
-	) -> Result<(U63, Option<NonEmptyBz<Self::Value>>), Self::Error>
+	fn get<K>(&self, key: NonEmptyBz<K>) -> Result<(U63, Option<Self::Value>), Self::Error>
 	where
 		K: AsRef<[u8]>;
 }
