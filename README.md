@@ -44,3 +44,7 @@ The core operations pivot around two primary tree models:
 ## Inspiration
 
 This implementation draws its concepts and fundamental mechanics from [Cosmos's IAVL](https://github.com/cosmos/iavl) in Go. It marries a balanced AVL tree with cryptographic Merkle tree properties to support deterministic state hashing and historical version queries commonly required by blockchain state layers.
+
+## License
+
+This project is dual-licensed under [Apache 2.0](LICENSE-APACHE) or [MIT](LICENSE-MIT).
